@@ -1,0 +1,18 @@
+field: packaging
+forms:
+  vertical: {order: 4, title: "Род упаковки, число мест, общий вес"}
+subject: "НЕ СВЕРЯЕТСЯ, ПРОВЕРЯЕТСЯ ФАКТ ЗАПОЛНЕНИЯ"
+clause: none
+check: filled
+rule: "Поле заполнено. Состав и формат не проверяются."
+params: {}
+if_empty: mismatch
+comments:
+  match: "Поле заполнено"
+  mismatch: "Поле не заполнено"
+  review: ""
+status: draft
+evidence:
+  - "005: «коробки 3700 мест / 18500 кг» — верно"
+clarify:
+  - "7: указан только род упаковки, без числа мест и веса. Это «совпадает» или «не совпадает»?"
