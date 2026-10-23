@@ -1,0 +1,18 @@
+field: sealing
+forms:
+  vertical: {order: 14, title: "Пломбирование"}
+subject: "НЕ ОБЯЗАТЕЛЕН ДЛЯ СВЕРКИ"
+clause: none
+check: filled
+rule: "Поле не сверяется. Любое значение и пустое поле — совпадает."
+params: {}
+if_empty: match
+comments:
+  match: "Не обязателен для сверки"
+  mismatch: ""
+  review: ""
+status: draft
+evidence:
+  - "005: «да» — верно"
+  - "97: «нет» — ФСЦ: это не расхождение, проверять не требуется"
+clarify: []
