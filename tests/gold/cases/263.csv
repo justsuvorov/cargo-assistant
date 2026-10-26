@@ -1,0 +1,40 @@
+declaration,shipment,field,status,basis,note
+263,263/1,insurer,match,fsc-ok,
+263,263/1,policy,match,fsc-ok,
+263,263/1,period_start,match,fsc-ok,
+263,263/1,period_end,match,fsc-ok,
+263,263/1,cargo,match,fsc-ok,
+263,263/1,beneficiary,match,fsc-ok,
+263,263/1,document_number,match,fsc-ok,
+263,263/1,document_date,match,fsc-ok,
+263,263/1,transport,match,fsc-note,"ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"
+263,263/1,departure,match,fsc-ok,
+263,263/1,transshipment,match,fsc-ok,
+263,263/1,destination,match,fsc-ok,
+263,263/1,sum,match,fsc-ok,
+263,263/2,insurer,match,fsc-ok,
+263,263/2,policy,match,fsc-ok,
+263,263/2,period_start,match,fsc-note,ФСЦ: результат противоречит комментарию; дата в сроке ГП
+263,263/2,period_end,match,fsc-ok,
+263,263/2,cargo,match,fsc-ok,
+263,263/2,beneficiary,match,fsc-ok,
+263,263/2,document_number,match,fsc-ok,
+263,263/2,document_date,match,fsc-ok,
+263,263/2,transport,match,fsc-note,"ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"
+263,263/2,departure,match,fsc-ok,
+263,263/2,transshipment,match,fsc-note,ФСЦ: не учтены особые условия; то же значение в 263/1 — «верно» для «совпадает»
+263,263/2,destination,match,fsc-ok,
+263,263/2,sum,match,fsc-ok,
+263,263/3,insurer,match,fsc-ok,
+263,263/3,policy,match,fsc-ok,
+263,263/3,period_start,match,fsc-ok,
+263,263/3,period_end,match,fsc-ok,
+263,263/3,cargo,match,fsc-ok,
+263,263/3,beneficiary,match,fsc-ok,
+263,263/3,document_number,match,fsc-ok,
+263,263/3,document_date,match,fsc-ok,
+263,263/3,transport,match,fsc-note,"ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"
+263,263/3,departure,match,fsc-ok,
+263,263/3,transshipment,match,fsc-note,«Частично»: замечание к выделению и пометке доп. проверки; статус не оспорен
+263,263/3,destination,match,fsc-ok,
+263,263/3,sum,match,fsc-ok,

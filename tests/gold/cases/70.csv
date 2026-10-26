@@ -1,0 +1,13 @@
+declaration,shipment,field,status,basis,note
+70,70,insurer,mismatch,fsc-ok,
+70,70,policy,match,fsc-ok,
+70,70,cargo,match,fsc-ok,
+70,70,packaging,match,fsc-ok,
+70,70,beneficiary,mismatch,fsc-note,"ФСЦ: лишняя проверка в комментарии, но данные неполные — нет ОПФ"
+70,70,sum,review,D-22,"Сумма в евро; ФСЦ: лимит не превышен. По D-22 сумма в валюте, отличной от валюты лимита, не сравнивается; валюту лимита подтвердить (ГП нет, П-1)"
+70,70,departure,match,fsc-ok,
+70,70,transshipment,match,fsc-ok,
+70,70,destination,match,fsc-ok,
+70,70,document,match,fsc-note,ФСЦ: номер и дата есть — поле заполнено; тип документа не проверяется
+70,70,sealing,match,fsc-ok,
+70,70,other,match,fsc-ok,

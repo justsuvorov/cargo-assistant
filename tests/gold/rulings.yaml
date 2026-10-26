@@ -1,0 +1,140 @@
+# Настройки чернового эталона: форма каждой декларации, подписи без одного ключа поля,
+# испорченные строки MVP и решения eval по замечаниям ФСЦ, кроме простого «верно».
+# Эталон пересобирается командой python -m tools.eval gold --source <папка с разметкой>.
+# Решения меняются только с согласия пользователя.
+
+forms:
+  "005": vertical
+  "35": psg
+  "70": vertical
+  "76": vertical
+  "97": vertical
+  "107": vertical
+  "113": psg
+  "114": psg
+  "164": vertical
+  "263": psg
+  "271": psg
+
+unmapped:
+  period: "В ПСГ период разделён на period_start и period_end, одна строка MVP не делится однозначно"
+  document: "В ПСГ транспортный документ разделён на document_number и document_date, одна строка MVP не делится однозначно"
+  carrier: "В ПСГ перевозчик входит в «Вид транспорта и перевозчик» (transport); нужна ли отдельная строка — Ф-14"
+
+broken:
+  "114/4": "Ф-19: строки MVP испорчены — блок 114/4 повторяется (54 строки вместо 13), часть строк без комментариев; нужна разметка заново"
+
+rulings:
+  - {shipment: "005", field: carrier, status: match, basis: fsc-note, note: "Замечание ФСЦ только к комментарию о риске мошенничества; перевозчик в перечне, статус не оспорен"}
+
+  - {shipment: "35", field: insurer, status: match, basis: fsc-note, note: "ФСЦ: страхователь совпадает, доп. проверка не нужна"}
+  - {shipment: "35", field: cargo, ask: "ФСЦ: проверка неверна, груз нужно сверять с п. 5 ГП; ожидаемый статус для «ТНП» не указан (Ф-4)", offer: review}
+  - {shipment: "35", field: transport, status: match, basis: fsc-note, note: "«Частично»: лишняя сверка с периодом в комментарии; вид транспорта не оспорен"}
+  - {shipment: "35", field: transshipment, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP в комментарии — не статус"}
+  - {shipment: "35", field: "Период страхования", ask: "ПСГ-форма (D-14): строка MVP «Период страхования» не делится однозначно на period_start и period_end; ФСЦ: «верно»", offer: "period_start и period_end — match"}
+  - {shipment: "35", field: "Транспортный документ (ТТН/ЦМР)", ask: "ПСГ-форма (D-14): строка MVP не делится однозначно на document_number и document_date; ФСЦ: «верно»", offer: "document_number и document_date — match"}
+  - {shipment: "35", field: "Перевозчик", ask: "ПСГ-форма (D-14): отдельной строки «Перевозчик» в ПСГ нет (Ф-14); ФСЦ: «частично» без пояснения", offer: ""}
+
+  - {shipment: "70", field: beneficiary, status: mismatch, basis: fsc-note, note: "ФСЦ: лишняя проверка в комментарии, но данные неполные — нет ОПФ"}
+  - {shipment: "70", field: sum, status: review, basis: D-22, note: "Сумма в евро; ФСЦ: лимит не превышен. По D-22 сумма в валюте, отличной от валюты лимита, не сравнивается; валюту лимита подтвердить (ГП нет, П-1)"}
+  - {shipment: "70", field: transport, ask: "ФСЦ: «сверен только п. 7, почему не сверено с п. 8?» — статус не указан; разрешён ли авиатранспорт по п. 8 ГП, локально не проверить (ГП нет, П-1)", offer: ""}
+  - {shipment: "70", field: period, ask: "ФСЦ: сверять с ДС 4 (срок ГП до 28.09.2026). Начало перевозки в сроке, окончание 18.10.2026 — после срока; статус зависит от продления до окончания ответственности по партии (Ф-2)", offer: "match, если в ГП есть такое продление"}
+  - {shipment: "70", field: document, status: match, basis: fsc-note, note: "ФСЦ: номер и дата есть — поле заполнено; тип документа не проверяется"}
+  - {shipment: "70", field: carrier, ask: "ФСЦ: перевозчик не сверяется с п. 11.1; статус не оспорен, но в поле нет ОПФ, а проверяется «ОПФ + наименование» (ср. Ф-6)", offer: "match, если для иностранного перевозчика ОПФ не требуется"}
+
+  - {shipment: "76", field: sum, status: match, basis: fsc-note, note: "ФСЦ: ДС 4 относится к другой отгрузке; лимит ГП 900 млн (D-23), сумма ниже"}
+  - {shipment: "76", field: transport, status: match, basis: fsc-note, note: "ФСЦ: это автоперевозка, а не смешанная; авто разрешено, статус не оспорен"}
+  - {shipment: "76", field: transshipment, ask: "ФСЦ: «почему сверка с п. 16 ГП, какая логика?» — статус не указан. Транспорт только авто (замечание ФСЦ к полю «Транспорт»), а по 113 пустой пункт перегрузки при несмешанном транспорте допустим", offer: match}
+  - {shipment: "76", field: carrier, ask: "Перевозчик пуст; ФСЦ: сверка с перечнем нужна только при риске 3.4.28 — статус пустого поля не указан (Ф-13)", offer: "mismatch, поле проверяется на заполнение"}
+
+  - {shipment: "97", field: cargo, ask: "ФСЦ: «почему соответствует?» — статус для «мясо» не указан (Ф-4)", offer: review}
+  - {shipment: "97", field: beneficiary, status: mismatch, basis: fsc-note, note: "ФСЦ: данных нет («нет»), а они должны быть"}
+  - {shipment: "97", field: sum, status: mismatch, basis: D-23, note: "Сумма выше лимита ГП; отметка ФСЦ «верно, но комментарий „совпадает“» — ошибка разметки"}
+  - {shipment: "97", field: transshipment, status: mismatch, basis: fsc-note, note: "ФСЦ: при смешанной перевозке пункт перегрузки обязателен; поле пусто"}
+  - {shipment: "97", field: carrier, status: match, basis: fsc-note, note: "ФСЦ: без риска 3.4.28 перевозчик с перечнем не сверяется; поле заполнено"}
+  - {shipment: "97", field: sealing, status: match, basis: fsc-note, note: "ФСЦ: пометка MVP о расхождении лишняя; поле не обязательно"}
+
+  - {shipment: "107", field: sum, status: match, basis: fsc-note, note: "ФСЦ: ДС 4 к другой отгрузке не применяется; лимит ГП 900 млн (D-23), сумма ниже"}
+  - {shipment: "107", field: departure, status: match, basis: fsc-note, note: "ФСЦ: точный адрес не требуется"}
+  - {shipment: "107", field: carrier, status: match, basis: fsc-note, note: "ФСЦ: перевозчик не сверяется, проверяется факт заполнения; поле заполнено"}
+  - {shipment: "107", field: other, ask: "ФСЦ: «почему это влияет на покрытие?» — статус не оспорен, но нужно ли сверять с ГП условия перевозки из «Прочих сведений» (Ф-15)", offer: match}
+
+  - {shipment: "113/1", field: cargo, status: mismatch, basis: fsc-note, note: "ФСЦ: в составе груза мех — он в исключениях; итог строки — худший статус (Ф-5)"}
+  - {shipment: "113/1", field: document_number, status: match, basis: fsc-note, note: "ФСЦ: ТТН может быть несколько"}
+  - {shipment: "113/1", field: document_date, status: match, basis: fsc-note, note: "ФСЦ: дат может быть несколько, формат любой"}
+  - {shipment: "113/1", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно, перевозчик не обязателен"}
+  - {shipment: "113/1", field: departure, ask: "ФСЦ: опечатка — не расхождение, но в поле весь маршрут (отправление и назначение): «это было проверено?» — статус не указан", offer: match}
+  - {shipment: "113/1", field: transshipment, status: match, basis: fsc-note, note: "ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна"}
+  - {shipment: "113/1", field: destination, ask: "ФСЦ: опечатка — не расхождение, но в поле весь маршрут (отправление и назначение): «это было проверено?» — статус не указан", offer: match}
+
+  - {shipment: "113/2", field: period_start, status: match, basis: fsc-note, note: "ФСЦ: результат противоречит комментарию; дата в сроке ГП"}
+  - {shipment: "113/2", field: period_end, status: match, basis: fsc-note, note: "ФСЦ: результат противоречит комментарию; дата в сроке ГП"}
+  - {shipment: "113/2", field: cargo, ask: "ФСЦ: «как ИИ распознал, что груз не скоропорт?»; в 113/1 ФСЦ: по «продукты» нельзя определить скоропорт — статус не указан (Ф-4)", offer: review}
+  - {shipment: "113/2", field: document_date, status: match, basis: fsc-note, note: "ФСЦ: дат может быть несколько, формат любой"}
+  - {shipment: "113/2", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно, перевозчик не обязателен"}
+  - {shipment: "113/2", field: transshipment, status: match, basis: fsc-note, note: "ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна"}
+
+  - {shipment: "113/3", field: insurer, status: match, basis: fsc-note, note: "ФСЦ: наименование одно и то же (сокращение «ТД»), см. Ф-18"}
+  - {shipment: "113/3", field: period_start, status: match, basis: fsc-note, note: "ФСЦ: сроки не выходят за рамки ГП"}
+  - {shipment: "113/3", field: period_end, status: match, basis: fsc-note, note: "ФСЦ: сроки не выходят за рамки ГП"}
+  - {shipment: "113/3", field: cargo, status: mismatch, basis: fsc-note, note: "ФСЦ: почтовые отправления в исключениях"}
+  - {shipment: "113/3", field: document_date, status: match, basis: fsc-note, note: "ФСЦ: дат может быть несколько, формат любой"}
+  - {shipment: "113/3", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно; пометка MVP — не статус"}
+
+  - {shipment: "113/4", field: period_start, status: match, basis: fsc-note, note: "ФСЦ: сроки не выходят за рамки ГП"}
+  - {shipment: "113/4", field: period_end, status: match, basis: fsc-note, note: "ФСЦ: сроки не выходят за рамки ГП"}
+  - {shipment: "113/4", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно, перевозчик не обязателен"}
+
+  - {shipment: "114/1", field: period_start, ask: "ФСЦ: «некорректно» без пояснения; дата начала в сроке ГП", offer: match}
+  - {shipment: "114/1", field: period_end, ask: "Разметка противоречива: здесь «верно» для «не совпадает», в 114/2 и 114/3 «верно» для «совпадает», в 114/5 «совпадает с продлением» — «самый верный ответ» (Ф-2)", offer: "match, если в ГП есть продление до окончания ответственности по партии"}
+  - {shipment: "114/1", field: beneficiary, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/1", field: document_date, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/1", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно"}
+  - {shipment: "114/1", field: transshipment, ask: "ФСЦ: «некорректно» без пояснения; в 113 ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна", offer: match}
+
+  - {shipment: "114/2", field: insurer, ask: "ФСЦ: «некорректно» без пояснения; в 113/3 ФСЦ: «ТД» и «Торговый дом» — одно наименование", offer: match}
+  - {shipment: "114/2", field: policy, ask: "ФСЦ: «некорректно» без пояснения; номер и дата ГП в остальных строках — «верно»", offer: match}
+  - {shipment: "114/2", field: period_end, ask: "ФСЦ: «верно, но комментарий некорректный» для «совпадает», а в 114/1 «верно» для «не совпадает» при тех же датах (Ф-2)", offer: "match, если в ГП есть продление до окончания ответственности по партии"}
+  - {shipment: "114/2", field: beneficiary, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/2", field: document_date, ask: "Нет отметки ФСЦ; MVP счёл расхождением формат списка дат, а в 113 ФСЦ: формат любой", offer: match}
+  - {shipment: "114/2", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно"}
+  - {shipment: "114/2", field: departure, status: match, basis: fsc-note, note: "ФСЦ: тот же маршрут в 114/1 совпадает"}
+  - {shipment: "114/2", field: transshipment, ask: "ФСЦ: «некорректно» без пояснения; в 113 ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна", offer: match}
+  - {shipment: "114/2", field: destination, status: match, basis: fsc-note, note: "ФСЦ: адреса достаточно"}
+
+  - {shipment: "114/3", field: period_end, ask: "ФСЦ: «верно, но комментарий некорректный» для «совпадает», а в 114/1 «верно» для «не совпадает» при тех же датах (Ф-2)", offer: "match, если в ГП есть продление до окончания ответственности по партии"}
+  - {shipment: "114/3", field: beneficiary, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/3", field: document_date, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/3", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно; пометка MVP — не статус"}
+  - {shipment: "114/3", field: transshipment, ask: "ФСЦ: «некорректно» без пояснения; в 113 ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна", offer: match}
+
+  - {shipment: "114/5", field: period_end, ask: "ФСЦ: «самый верный ответ» для «совпадает с продлением», а в 114/1 «верно» для «не совпадает» при тех же датах (Ф-2)", offer: "match, если в ГП есть продление до окончания ответственности по партии"}
+  - {shipment: "114/5", field: beneficiary, ask: "ФСЦ: «некорректно» без пояснения; страхователь указан выгодоприобретателем, как в остальных строках", offer: match}
+  - {shipment: "114/5", field: document_date, ask: "Нет отметки ФСЦ", offer: match}
+  - {shipment: "114/5", field: transport, status: match, basis: fsc-note, note: "ФСЦ: указания «авто» достаточно; пометка MVP — не статус"}
+  - {shipment: "114/5", field: transshipment, ask: "ФСЦ: «некорректно» без пояснения; в 113 ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна", offer: match}
+
+  - {shipment: "164", field: cargo, ask: "ФСЦ: «не учтены ДС» — статус не указан; расширяют ли ДС объект страхования на этот груз, локально не проверить (ГП и ДС нет, П-1)", offer: match}
+  - {shipment: "164", field: packaging, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP — не статус"}
+  - {shipment: "164", field: sum, status: review, basis: D-22, note: "Сумма в юанях, лимит ГП в евро; ФСЦ предлагали пересчёт по курсу, по D-22 сумма не пересчитывается"}
+  - {shipment: "164", field: transport, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP — не статус"}
+  - {shipment: "164", field: departure, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP — не статус"}
+  - {shipment: "164", field: transshipment, ask: "ФСЦ: «с условиями ГП не было сверено?» — статус не указан", offer: ""}
+  - {shipment: "164", field: destination, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP — не статус"}
+  - {shipment: "164", field: period, status: match, basis: fsc-note, note: "ФСЦ: период корректен с учётом ДС к п. 6"}
+  - {shipment: "164", field: document, status: match, basis: fsc-note, note: "ФСЦ: указание инвойса как документа допустимо"}
+  - {shipment: "164", field: other, status: match, basis: fsc-note, note: "ФСЦ: доп. проверка не нужна; пометка MVP — не статус"}
+
+  - {shipment: "263/1", field: transport, status: match, basis: fsc-note, note: "ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"}
+  - {shipment: "263/2", field: period_start, status: match, basis: fsc-note, note: "ФСЦ: результат противоречит комментарию; дата в сроке ГП"}
+  - {shipment: "263/2", field: transport, status: match, basis: fsc-note, note: "ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"}
+  - {shipment: "263/2", field: transshipment, status: match, basis: fsc-note, note: "ФСЦ: не учтены особые условия; то же значение в 263/1 — «верно» для «совпадает»"}
+  - {shipment: "263/3", field: transport, status: match, basis: fsc-note, note: "ФСЦ: не учтены особые условия клиента — «в соответствии с п. 8 ГП» допустимо (D-17, предложено)"}
+  - {shipment: "263/3", field: transshipment, status: match, basis: fsc-note, note: "«Частично»: замечание к выделению и пометке доп. проверки; статус не оспорен"}
+
+  - {shipment: "271/1", field: transport, ask: "«Частично»: не сверено условие ГП «без перетарки из контейнера на всём маршруте» — как его проверять и в каком поле (Ф-10)", offer: ""}
+  - {shipment: "271/1", field: transshipment, status: mismatch, basis: fsc-note, note: "ФСЦ: транспорт смешанный — пункт перегрузки обязателен; поле пусто"}
+  - {shipment: "271/2", field: period_start, ask: "ФСЦ: «неправильно» без пояснения; даты те же, что в 271/1, где «совпадает» — «верно»", offer: match}
+  - {shipment: "271/2", field: period_end, ask: "ФСЦ: «неправильно» без пояснения; даты те же, что в 271/1, где «совпадает» — «верно»", offer: match}
+  - {shipment: "271/2", field: transport, ask: "«Частично»: лишняя проверка по п. 9; статус по условию «без перетарки» не указан (Ф-10)", offer: ""}
+  - {shipment: "271/2", field: transshipment, status: match, basis: fsc-note, note: "«Частично»: замечание к выделению и формулировке; пункт перегрузки заполнен при смешанном транспорте"}

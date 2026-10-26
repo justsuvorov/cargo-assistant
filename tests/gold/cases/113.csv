@@ -1,0 +1,50 @@
+declaration,shipment,field,status,basis,note
+113,113/1,insurer,match,fsc-ok,
+113,113/1,policy,match,fsc-ok,
+113,113/1,period_start,match,fsc-ok,
+113,113/1,period_end,match,fsc-ok,
+113,113/1,cargo,mismatch,fsc-note,ФСЦ: в составе груза мех — он в исключениях; итог строки — худший статус (Ф-5)
+113,113/1,beneficiary,match,fsc-ok,
+113,113/1,document_number,match,fsc-note,ФСЦ: ТТН может быть несколько
+113,113/1,document_date,match,fsc-note,"ФСЦ: дат может быть несколько, формат любой"
+113,113/1,transport,match,fsc-note,"ФСЦ: указания «авто» достаточно, перевозчик не обязателен"
+113,113/1,transshipment,match,fsc-note,"ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна"
+113,113/1,sum,match,fsc-ok,
+113,113/2,insurer,match,fsc-ok,
+113,113/2,policy,match,fsc-ok,
+113,113/2,period_start,match,fsc-note,ФСЦ: результат противоречит комментарию; дата в сроке ГП
+113,113/2,period_end,match,fsc-note,ФСЦ: результат противоречит комментарию; дата в сроке ГП
+113,113/2,beneficiary,match,fsc-ok,
+113,113/2,document_number,match,fsc-ok,
+113,113/2,document_date,match,fsc-note,"ФСЦ: дат может быть несколько, формат любой"
+113,113/2,transport,match,fsc-note,"ФСЦ: указания «авто» достаточно, перевозчик не обязателен"
+113,113/2,departure,match,fsc-ok,
+113,113/2,transshipment,match,fsc-note,"ФСЦ: при несмешанном транспорте пустой пункт перегрузки допустим, доп. проверка не нужна"
+113,113/2,destination,match,fsc-ok,
+113,113/2,sum,match,fsc-ok,
+113,113/3,insurer,match,fsc-note,"ФСЦ: наименование одно и то же (сокращение «ТД»), см. Ф-18"
+113,113/3,policy,match,fsc-ok,
+113,113/3,period_start,match,fsc-note,ФСЦ: сроки не выходят за рамки ГП
+113,113/3,period_end,match,fsc-note,ФСЦ: сроки не выходят за рамки ГП
+113,113/3,cargo,mismatch,fsc-note,ФСЦ: почтовые отправления в исключениях
+113,113/3,beneficiary,match,fsc-ok,
+113,113/3,document_number,match,fsc-ok,
+113,113/3,document_date,match,fsc-note,"ФСЦ: дат может быть несколько, формат любой"
+113,113/3,transport,match,fsc-note,ФСЦ: указания «авто» достаточно; пометка MVP — не статус
+113,113/3,departure,match,fsc-ok,
+113,113/3,transshipment,match,fsc-ok,
+113,113/3,destination,match,fsc-ok,
+113,113/3,sum,match,fsc-ok,
+113,113/4,insurer,match,fsc-ok,
+113,113/4,policy,match,fsc-ok,
+113,113/4,period_start,match,fsc-note,ФСЦ: сроки не выходят за рамки ГП
+113,113/4,period_end,match,fsc-note,ФСЦ: сроки не выходят за рамки ГП
+113,113/4,cargo,match,fsc-ok,
+113,113/4,beneficiary,match,fsc-ok,
+113,113/4,document_number,match,fsc-ok,
+113,113/4,document_date,match,fsc-ok,
+113,113/4,transport,match,fsc-note,"ФСЦ: указания «авто» достаточно, перевозчик не обязателен"
+113,113/4,departure,match,fsc-ok,
+113,113/4,transshipment,match,fsc-ok,
+113,113/4,destination,match,fsc-ok,
+113,113/4,sum,mismatch,fsc-ok,
