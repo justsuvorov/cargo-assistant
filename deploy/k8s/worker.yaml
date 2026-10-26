@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cargo-worker
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cargo-worker
+  template:
+    metadata:
+      labels:
+        app: cargo-worker
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: worker
+          image: cargo-assistant:latest
+          command: ["python", "-m", "app.jobs"]
+          envFrom:
+            - configMapRef:
+                name: cargo-config
+            - secretRef:
+                name: cargo-secret
+          volumeMounts:
+            - name: storage
+              mountPath: /data/storage
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: cargo-storage

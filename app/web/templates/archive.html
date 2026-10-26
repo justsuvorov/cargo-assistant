@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Архив</h1>
+<form method="get" action="/archive">
+  <label>Месяц <input type="month" name="month" value="{{ month }}"></label>
+  <button type="submit">Показать</button>
+</form>
+{% if rows %}
+<table>
+  <thead><tr><th>№</th><th>Файл</th><th>Номер декларации</th><th>Месяц</th><th>Состояние</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.declaration.id }}</td>
+    <td>{{ row.declaration.file_name }}</td>
+    <td>{{ row.declaration.number }}</td>
+    <td>{{ row.declaration.month }}</td>
+    <td>{% with job = row.job %}{% include "job.html" %}{% endwith %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>В архиве пока ничего нет.</p>
+{% endif %}
+{% endblock %}

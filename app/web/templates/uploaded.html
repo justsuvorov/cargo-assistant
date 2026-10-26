@@ -1,0 +1,6 @@
+{% for row in rows %}
+<tr>
+  <td>{{ row.name }}</td>
+  <td>{% with job = row.job %}{% include "job.html" %}{% endwith %}</td>
+</tr>
+{% endfor %}

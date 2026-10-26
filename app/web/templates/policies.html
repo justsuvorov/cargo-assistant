@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Полисы</h1>
+{% if policies %}
+<table>
+  <thead><tr><th>Номер ГП</th><th>Страхователь</th></tr></thead>
+  <tbody>
+  {% for policy in policies %}
+  <tr><td>{{ policy.number }}</td><td>{{ policy.insured }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Полисов пока нет. Загрузка пакета полиса появится на следующем этапе.</p>
+{% endif %}
+{% endblock %}

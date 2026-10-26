@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cargo-config
+data:
+  STORAGE_DIR: /data/storage
+  AUTH_DEV_MODE: "false"
+  KEYCLOAK_URL: https://keycloak.example.invalid
+  KEYCLOAK_REALM: cargo
+  KEYCLOAK_CLIENT_ID: cargo-assistant
+  KEYCLOAK_ROLE_USER: cargo_user
+  KEYCLOAK_ROLE_EXPERT: cargo_expert
+  KEYCLOAK_ROLE_ADMIN: cargo_admin
+  LLM_MODEL: change-me
+  LLM_MAX_CONCURRENCY: "4"
+  WORKER_MAX_JOBS: "2"
+  WORKER_POLL_INTERVAL: "1"
+  WORKER_JOB_TIMEOUT: "600"
+  WORKER_MAX_ATTEMPTS: "3"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: cargo-secret
+type: Opaque
+stringData:
+  DATABASE_URL: postgresql+asyncpg://cargo:change-me@postgres:5432/cargo
+  LLM_API_URL: https://gateway.example.invalid/v1/chat/completions
+  LLM_API_KEY: change-me

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cargo-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: cargo-api
+  template:
+    metadata:
+      labels:
+        app: cargo-api
+    spec:
+      initContainers:
+        - name: migrate
+          image: cargo-assistant:latest
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef:
+                name: cargo-config
+            - secretRef:
+                name: cargo-secret
+      containers:
+        - name: api
+          image: cargo-assistant:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: cargo-config
+            - secretRef:
+                name: cargo-secret
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+          volumeMounts:
+            - name: storage
+              mountPath: /data/storage
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: cargo-storage
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cargo-api
+spec:
+  selector:
+    app: cargo-api
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cargo-api
+spec:
+  rules:
+    - host: cargo.example.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: cargo-api
+                port:
+                  number: 80
