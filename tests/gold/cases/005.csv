@@ -1,0 +1,16 @@
+declaration,shipment,field,status,basis,note
+005,005,insurer,match,fsc-ok,
+005,005,policy,match,fsc-ok,
+005,005,cargo,match,fsc-ok,
+005,005,packaging,match,fsc-ok,
+005,005,beneficiary,match,fsc-ok,
+005,005,sum,match,fsc-ok,
+005,005,transport,match,fsc-ok,
+005,005,departure,match,fsc-ok,
+005,005,transshipment,match,fsc-ok,
+005,005,destination,match,fsc-ok,
+005,005,period,match,fsc-ok,
+005,005,document,match,fsc-ok,
+005,005,carrier,match,fsc-note,"Замечание ФСЦ только к комментарию о риске мошенничества; перевозчик в перечне, статус не оспорен"
+005,005,sealing,match,fsc-ok,
+005,005,other,match,fsc-ok,

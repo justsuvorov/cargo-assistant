@@ -1,0 +1,15 @@
+declaration,shipment,field,status,basis,note
+97,97,insurer,match,fsc-ok,
+97,97,policy,match,fsc-ok,
+97,97,packaging,match,fsc-ok,
+97,97,beneficiary,mismatch,fsc-note,"ФСЦ: данных нет («нет»), а они должны быть"
+97,97,sum,mismatch,D-23,"Сумма выше лимита ГП; отметка ФСЦ «верно, но комментарий „совпадает“» — ошибка разметки"
+97,97,transport,match,fsc-ok,
+97,97,departure,match,fsc-ok,
+97,97,transshipment,mismatch,fsc-note,ФСЦ: при смешанной перевозке пункт перегрузки обязателен; поле пусто
+97,97,destination,match,fsc-ok,
+97,97,period,mismatch,fsc-ok,
+97,97,document,match,fsc-ok,
+97,97,carrier,match,fsc-note,ФСЦ: без риска 3.4.28 перевозчик с перечнем не сверяется; поле заполнено
+97,97,sealing,match,fsc-note,ФСЦ: пометка MVP о расхождении лишняя; поле не обязательно
+97,97,other,match,fsc-ok,

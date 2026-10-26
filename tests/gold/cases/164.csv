@@ -1,0 +1,14 @@
+declaration,shipment,field,status,basis,note
+164,164,insurer,match,fsc-ok,
+164,164,policy,match,fsc-ok,
+164,164,packaging,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP — не статус
+164,164,beneficiary,match,fsc-ok,
+164,164,sum,review,D-22,"Сумма в юанях, лимит ГП в евро; ФСЦ предлагали пересчёт по курсу, по D-22 сумма не пересчитывается"
+164,164,transport,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP — не статус
+164,164,departure,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP — не статус
+164,164,destination,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP — не статус
+164,164,period,match,fsc-note,ФСЦ: период корректен с учётом ДС к п. 6
+164,164,document,match,fsc-note,ФСЦ: указание инвойса как документа допустимо
+164,164,carrier,match,fsc-ok,
+164,164,sealing,match,fsc-ok,
+164,164,other,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP — не статус

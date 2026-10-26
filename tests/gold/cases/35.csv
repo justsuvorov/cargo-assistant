@@ -1,0 +1,9 @@
+declaration,shipment,field,status,basis,note
+35,35,insurer,match,fsc-note,"ФСЦ: страхователь совпадает, доп. проверка не нужна"
+35,35,policy,match,fsc-ok,
+35,35,beneficiary,match,fsc-ok,
+35,35,sum,match,fsc-ok,
+35,35,transport,match,fsc-note,«Частично»: лишняя сверка с периодом в комментарии; вид транспорта не оспорен
+35,35,departure,match,fsc-ok,
+35,35,transshipment,match,fsc-note,ФСЦ: доп. проверка не нужна; пометка MVP в комментарии — не статус
+35,35,destination,match,fsc-ok,
