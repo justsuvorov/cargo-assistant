@@ -106,7 +106,7 @@ check: date_range                 # exact | fuzzy | date_range | lte_limit | fil
 rule: "…"                         # правило словами; для semantic уходит в промпт
 params: {…}                       # параметры типа проверки
 if_empty: mismatch                # match | mismatch | skip | review
-comments:                         # шаблоны: {reference}, {entry}, {limit}, {policy_start}, {policy_end}
+comments:                         # шаблоны: {reference}, {entry}, {amount}, {limit}, {policy_start}, {policy_end}
   match: "Входит в срок действия ГП"
   mismatch: "Выходит за срок действия ГП (до {policy_end})"
   review: "Дата окончания не распознана"
