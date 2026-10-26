@@ -57,9 +57,7 @@ def test_split_fact_cuts_cargo_at_commas_and_semicolons() -> None:
 
 def test_split_fact_cuts_route_at_dashes_but_not_inside_words() -> None:
     assert_that(
-        Split(
-            ("Город, ул. Первая - Санкт-Петербург, лит. В- Псков",), r"\s*[-–—]\s+"
-        ).entries(),
+        Split(("Город, ул. Первая - Санкт-Петербург, лит. В- Псков",), r"\s*[-–—]\s+").entries(),
         contains_exactly("Город, ул. Первая", "Санкт-Петербург, лит. В", "Псков"),
         "Split fact does not cut a route at dashes only",
     )
