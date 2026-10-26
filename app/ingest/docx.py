@@ -17,6 +17,7 @@ class Docx:
         self._path: Final = path
 
     def sheets(self) -> tuple[Sheet, ...]:
+        # @todo #2:30min Читать абзацы и таблицы docx в порядке документа, а не по группам
         document = Document(str(self._path))
         rows = tuple((Written(0, paragraph.text),) for paragraph in document.paragraphs) + tuple(
             self._row(row.cells) for table in document.tables for row in table.rows
