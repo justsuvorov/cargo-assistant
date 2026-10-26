@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Сверка</h1>
+<form id="upload" hx-post="/reconcile/upload" hx-encoding="multipart/form-data"
+      hx-target="#queue" hx-swap="afterbegin">
+  <div class="drop" id="drop">
+    Перетащите файлы деклараций сюда или выберите их
+    <input type="file" name="files" multiple required>
+  </div>
+  <button type="submit">Отправить на сверку</button>
+</form>
+<h2>Очередь</h2>
+<table>
+  <thead><tr><th>Файл</th><th>Состояние</th></tr></thead>
+  <tbody id="queue">
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.declaration.file_name }}</td>
+    <td>{% with job = row.job %}{% include "job.html" %}{% endwith %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

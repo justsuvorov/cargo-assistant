@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Сверка деклараций</title>
+  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <style>
+    body { font-family: sans-serif; margin: 0; color: #222; }
+    nav { background: #1f3a5f; padding: 0.8rem 1.5rem; }
+    nav a { color: #fff; margin-right: 1.5rem; text-decoration: none; }
+    nav a.current { border-bottom: 2px solid #fff; }
+    main { padding: 1.5rem; }
+    table { border-collapse: collapse; }
+    td, th { border: 1px solid #ccc; padding: 0.3rem 0.7rem; text-align: left; }
+    .drop { border: 2px dashed #889; padding: 2rem; text-align: center; margin-bottom: 1rem; }
+    .drop.over { background: #eef; }
+    .status-queued { color: #886600; }
+    .status-running { color: #225599; }
+    .status-done { color: #227733; }
+    .status-failed { color: #aa2222; }
+  </style>
+</head>
+<body>
+  <nav>
+    <a href="/policies" class="{{ 'current' if page == 'policies' }}">Полисы</a>
+    <a href="/reconcile" class="{{ 'current' if page == 'reconcile' }}">Сверка</a>
+    <a href="/archive" class="{{ 'current' if page == 'archive' }}">Архив</a>
+  </nav>
+  <main>{% block content %}{% endblock %}</main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

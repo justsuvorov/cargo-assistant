@@ -1,0 +1,77 @@
+import asyncio
+import time
+from typing import Final, Protocol, final
+
+from app.core.journal import Journal
+from app.core.settings import Settings
+from app.jobs.queue import Jobs, Snapshot
+from app.jobs.stages import Pipelines
+
+
+class Serving(Protocol):
+    """Process that takes jobs from the queue and runs their stages."""
+
+    async def serve(self, stop: asyncio.Event) -> None: ...
+
+    async def drain(self) -> int: ...
+
+
+@final
+class Shift:
+    """Shift of a worker process that runs several jobs at once and revives stuck ones."""
+
+    __slots__ = ("_jobs", "_journal", "_pipelines", "_settings")
+
+    def __init__(
+        self, jobs: Jobs, pipelines: Pipelines, settings: Settings, journal: Journal
+    ) -> None:
+        self._jobs: Final = jobs
+        self._pipelines: Final = pipelines
+        self._settings: Final = settings
+        self._journal: Final = journal
+
+    async def serve(self, stop: asyncio.Event) -> None:
+        running: set[asyncio.Task[None]] = set()
+        while not stop.is_set():
+            await self._jobs.revive(self._settings.timeout() * 2, self._settings.attempts())
+            for job_id in await self._jobs.claim(self._settings.jobs() - len(running)):
+                task = asyncio.create_task(self._run(job_id))
+                running.add(task)
+                task.add_done_callback(running.discard)
+            try:
+                await asyncio.wait_for(stop.wait(), self._settings.poll())
+            except TimeoutError:
+                continue
+        await asyncio.gather(*running)
+
+    async def drain(self) -> int:
+        count = 0
+        while claimed := await self._jobs.claim(self._settings.jobs()):
+            await asyncio.gather(*(self._run(job_id) for job_id in claimed))
+            count += len(claimed)
+        return count
+
+    async def _run(self, job_id: int) -> None:
+        snapshot = await self._jobs.snapshot(job_id)
+        declaration = snapshot.declaration()
+        self._journal.info("Задача взята в работу", job_id, declaration)
+        try:
+            await asyncio.wait_for(self._stages(snapshot), self._settings.timeout())
+        except Exception as error:
+            self._journal.error(f"Задача не выполнена: {error}", job_id, declaration)
+            await self._jobs.fail(job_id, f"{type(error).__name__}: {error}")
+        else:
+            await self._jobs.finish(job_id)
+            self._journal.info("Задача выполнена", job_id, declaration)
+
+    async def _stages(self, job: Snapshot) -> None:
+        stages = self._pipelines.stages(job.kind)
+        for index, stage in enumerate(stages):
+            await self._jobs.advance(job.id, stage.name(), 100 * index // len(stages))
+            started = time.perf_counter()
+            await stage.run(job)
+            elapsed = time.perf_counter() - started
+            await self._jobs.time(job.id, stage.name(), elapsed)
+            self._journal.info(
+                f"Стадия {stage.name()} заняла {elapsed:.3f} с", job.id, job.declaration()
+            )

@@ -1,0 +1,57 @@
+x-app: &app
+  build: .
+  environment:
+    DATABASE_URL: postgresql+asyncpg://cargo:${POSTGRES_PASSWORD:-cargo}@postgres:5432/cargo
+    STORAGE_DIR: /data/storage
+    AUTH_DEV_MODE: ${AUTH_DEV_MODE:-true}
+    KEYCLOAK_URL: ${KEYCLOAK_URL:-}
+    KEYCLOAK_REALM: ${KEYCLOAK_REALM:-}
+    KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}
+    LLM_API_URL: ${LLM_API_URL:-}
+    LLM_API_KEY: ${LLM_API_KEY:-}
+    LLM_MODEL: ${LLM_MODEL:-}
+    WORKER_MAX_JOBS: ${WORKER_MAX_JOBS:-2}
+  volumes:
+    - storage:/data/storage
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: cargo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cargo}
+      POSTGRES_DB: cargo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cargo"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+
+  api:
+    <<: *app
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "app.jobs"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
+  storage:
