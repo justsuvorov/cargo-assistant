@@ -14,6 +14,7 @@
 - [docs/decisions.md](docs/decisions.md) — журнал решений;
 - [docs/plan.md](docs/plan.md) — этапы и задачи;
 - [docs/questions.md](docs/questions.md) — открытые вопросы к ФСЦ и пользователю.
+- [docs/eval/gold-requirements.md](docs/eval/gold-requirements.md) — требования к эталонному набору.
 
 ## Структура репозитория
 
