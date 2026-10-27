@@ -139,7 +139,7 @@ def test_vertical_is_one_shipment_of_the_vertical_form() -> None:
     layout = Vertical(_russian("От ООО «Тест»"))
     assert_that(
         (layout.form(), len(layout.records()), layout.number(), layout.policy()),
-        equal_to(("vertical", 1, "Р-005", "0000T00GR0000")),
+        equal_to(("vertical", 1, "005", "0000T00GR0000")),
         "Vertical is not one shipment of the vertical form with its number and policy",
     )
 

@@ -17,9 +17,17 @@ def _page(*lines: tuple[str, ...]) -> Page:
 
 def test_number_is_read_from_a_separate_cell_next_to_the_title_word() -> None:
     assert_that(
-        Title(_page(("Декларация", "", "", "№ Р-005", "об отгрузке"))).number(),
-        equal_to("Р-005"),
+        Title(_page(("Декларация", "", "", "№ 0315", "об отгрузке"))).number(),
+        equal_to("0315"),
         "Title does not read the number from the cell next to the title word",
+    )
+
+
+def test_number_drops_the_letter_prefix() -> None:
+    assert_that(
+        Title(_page(("Декларация", "", "", "№ Р-005", "об отгрузке"))).number(),
+        equal_to("005"),
+        "Title does not drop the letter prefix of the declaration number",
     )
 
 

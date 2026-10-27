@@ -101,7 +101,7 @@ def test_reads_number_form_policy_and_shipment_of_a_vertical_file(tmp_path: Path
     declared = Declared(Source(tmp_path / "a.xlsx"))
     assert_that(
         (declared.number(), declared.form(), declared.policy(), len(declared.shipments())),
-        equal_to(("Р-005", "vertical", "0000T00GR0000", 1)),
+        equal_to(("005", "vertical", "0000T00GR0000", 1)),
         "Declared does not read the number, form, policy and the only shipment of a vertical file",
     )
 
@@ -143,7 +143,7 @@ def test_picks_the_declaration_sheet_among_policy_sheets(tmp_path: Path) -> None
     book.save(tmp_path / "a.xlsx")
     assert_that(
         Declared(Source(tmp_path / "a.xlsx")).number(),
-        equal_to("Р-005"),
+        equal_to("005"),
         "Declared does not pick the declaration sheet among the policy sheets",
     )
 

@@ -41,8 +41,7 @@ class Title:
         )
         if not found:
             raise UnreadableError(f"В шапке листа {self._sheet.name()} не найден номер декларации")
-        # @todo #2:30min Решить с пользователем, отбрасывать ли префикс «Р-» в номере «Р-005» (D-21)
-        return found[0]
+        return re.sub(r"^\D+", "", found[0])
 
     def policy(self) -> str:
         found = self._found()
