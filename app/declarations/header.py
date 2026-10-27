@@ -5,7 +5,8 @@ from app.domain.errors import UnreadableError
 from app.ingest.book import Sheet
 
 _TITLE = re.compile(
-    r"(?:декларац\w*|declaration)\D*?(?:№|\bno\b\.?|\bn°|#)\s*([\w\-/]*\d[\w\-/]*)",
+    r"(?:декларац\w*|declaration)\D*?(?:№|\bno\b\.?|\bn°|#)\s*"
+    r"((?:[^\W\d_]{1,3}[\s.\-]+)?[\w\-/]*\d[\w\-/]*)",
     re.IGNORECASE,
 )
 _POLICY = re.compile(

@@ -109,3 +109,11 @@ def test_absent_policy_is_empty() -> None:
         equal_to(""),
         "Title invents a policy number that the sheet does not cite",
     )
+
+
+def test_number_drops_a_spaced_letter_prefix() -> None:
+    assert_that(
+        Title(_page(("Декларация", "", "", "№ р 050", "об отгрузке"))).number(),
+        equal_to("050"),
+        "Title does not drop a letter prefix separated by a space",
+    )
