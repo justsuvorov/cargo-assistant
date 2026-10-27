@@ -95,7 +95,12 @@ LLMCall              (job, назначение, хэш промпта, токе
 
 ## Клиент LLM
 
-- Интерфейс `Model.answer(purpose, messages, schema) -> BaseModel`.
+- Интерфейс `Model.answer(purpose, messages, schema) -> BaseModel`; код — `app/llm/`, подробности — [llm-gateway.md](llm-gateway.md).
+- Провайдер выбирается `LLM_PROVIDER`: `vsk` (шлюз в контуре, по умолчанию), `anthropic`, `gemini`. Внешние
+  провайдеры включаются только при `LLM_ALLOW_EXTERNAL=true` и только для обезличенных или вымышленных данных (П-17).
+  У Anthropic `temperature` не передаётся (по данным агента T-04, текущие модели его не принимают), поэтому
+  детерминизм гарантирован только у ВСК и Gemini.
+- TLS проверяется всегда; корпоративный CA — `LLM_CA_BUNDLE`.
 - `POST {LLM_API_URL}`, `Authorization: Bearer {LLM_API_KEY}`, поля `model`, `messages`,
   `max_tokens`, `temperature=0`, `thinking_token_budget`.
 - Если шлюз поддерживает `response_format` / `guided_json` — ответ ограничивается схемой;
@@ -135,8 +140,9 @@ knowledge/{ruleset_id}/source/{имя файла}
 
 Переменные окружения (`pydantic-settings`): `DATABASE_URL`, `STORAGE_DIR`, `LLM_API_URL`,
 `LLM_API_KEY`, `LLM_MODEL`, `LLM_MAX_TOKENS`, `LLM_THINKING_BUDGET`, `LLM_MAX_CONCURRENCY`,
-`LLM_TIMEOUT`, `WORKER_MAX_JOBS`, `WORKER_POLL_INTERVAL`, `WORKER_JOB_TIMEOUT`,
-`WORKER_MAX_ATTEMPTS`, `KEYCLOAK_*`. Секреты — через k8s secret.
+`LLM_TIMEOUT`, `LLM_TOTAL_TIMEOUT`, `LLM_PROVIDER`, `LLM_ALLOW_EXTERNAL`,
+`LLM_RESPONSE_FORMAT`, `LLM_VERIFY_TLS`, `LLM_CA_BUNDLE`, `ANTHROPIC_*`, `GEMINI_*`, `WORKER_MAX_JOBS`, `WORKER_POLL_INTERVAL`, `WORKER_JOB_TIMEOUT`,
+`WORKER_MAX_ATTEMPTS`, `KEYCLOAK_*`. Секреты — через k8s secret. Полный список с комментариями — `.env.example`.
 
 Логи на русском, с `job_id` и `declaration_id`. Время каждой стадии логируется и сохраняется;
 по этим данным проверяется НФТ-В.
