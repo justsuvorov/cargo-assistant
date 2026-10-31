@@ -10,11 +10,13 @@ rule: >-
   с датой в преамбуле.
 params:
   parts: [number, date]
+  ignore: ["№"]
 if_empty: mismatch
 comments:
   match: "Совпадает с ГП"
   mismatch: "Не совпадает с номером или датой ГП ({reference})"
   review: "Номер или дата ГП не распознаны"
+  empty: "Номер и дата ГП не указаны"
 status: draft
 evidence:
   - "005, 263, 271: номер и дата совпадают — верно"
