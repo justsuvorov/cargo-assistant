@@ -4,7 +4,7 @@ from pathlib import Path
 from tools.lint.angry import Angry
 from tools.lint.density import Density
 from tools.lint.finality import Attributes, Finality, Statics
-from tools.lint.interfaces import Declared, Interfaces
+from tools.lint.interfaces import Declared, Interfaces, Listed
 from tools.lint.naming import Names
 from tools.lint.pairing import Pairing
 from tools.lint.purity import Purity
@@ -28,7 +28,7 @@ def main() -> int:
         Scoped(Finality(), production, boundary),
         Scoped(Statics(), production, boundary),
         Scoped(Attributes(4), production, boundary),
-        Scoped(Interfaces(Declared(scripts)), production, boundary),
+        Scoped(Interfaces(Listed(Declared(scripts).names())), production, boundary),
         Scoped(
             Names(
                 r"(?:Analy[sz]|Build|Calculat|Check|Collect|Compar|Controll|Convert|Creat|Detect"

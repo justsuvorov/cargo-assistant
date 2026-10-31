@@ -32,6 +32,19 @@ class Declared:
 
 
 @final
+class Listed:
+    """Vocabulary fixed once, so that a code base is parsed a single time per run."""
+
+    __slots__ = ("_names",)
+
+    def __init__(self, names: frozenset[str]) -> None:
+        self._names: Final = names
+
+    def names(self) -> frozenset[str]:
+        return self._names
+
+
+@final
 class Interfaces:
     """Rule that every public method of a final class is first declared in some interface."""
 

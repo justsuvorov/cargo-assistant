@@ -1,6 +1,6 @@
 from hamcrest import assert_that, empty, equal_to, has_length
 
-from tools.lint.interfaces import Declared, Interfaces
+from tools.lint.interfaces import Declared, Interfaces, Listed
 from tools.lint.script import Code
 
 
@@ -47,4 +47,12 @@ def test_interfaces_skip_private_method() -> None:
         ),
         empty(),
         "Interfaces do not skip a private method",
+    )
+
+
+def test_listed_keeps_its_names() -> None:
+    assert_that(
+        Listed(frozenset({"text", "dates"})).names(),
+        equal_to(frozenset({"text", "dates"})),
+        "Listed vocabulary does not keep its names",
     )
