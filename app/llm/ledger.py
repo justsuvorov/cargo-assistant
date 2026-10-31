@@ -118,7 +118,6 @@ class Memory:
         self._lock: Final = threading.Lock()
 
     def record(self, call: Call) -> None:
-        # @todo #4:90min Писать вызовы в таблицу LLMCall (app/jobs/models.py) с job_id задачи
         with self._lock:
             self._calls.append(call)
 

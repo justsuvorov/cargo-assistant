@@ -11,19 +11,22 @@ data:
   KEYCLOAK_ROLE_USER: cargo_user
   KEYCLOAK_ROLE_EXPERT: cargo_expert
   KEYCLOAK_ROLE_ADMIN: cargo_admin
+  LLM_PROVIDER: vsk
+  LLM_ALLOW_EXTERNAL: "false"
+  LLM_API_URL: https://gateway.example.invalid/v1/chat/completions
   LLM_MODEL: change-me
+  LLM_RESPONSE_FORMAT: prompt
+  LLM_THINKING_BUDGET: "0"
+  LLM_MAX_TOKENS: "4096"
   LLM_MAX_CONCURRENCY: "4"
+  LLM_TIMEOUT: "60"
+  LLM_TOTAL_TIMEOUT: "300"
+  LLM_RETRY_ATTEMPTS: "5"
+  LLM_RETRY_PAUSE: "5"
+  LLM_EMPTY_ATTEMPTS: "3"
+  LLM_EMPTY_PAUSE: "1"
+  LLM_VERIFY_TLS: "true"
   WORKER_MAX_JOBS: "2"
   WORKER_POLL_INTERVAL: "1"
   WORKER_JOB_TIMEOUT: "600"
   WORKER_MAX_ATTEMPTS: "3"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: cargo-secret
-type: Opaque
-stringData:
-  DATABASE_URL: postgresql+asyncpg://cargo:change-me@postgres:5432/cargo
-  LLM_API_URL: https://gateway.example.invalid/v1/chat/completions
-  LLM_API_KEY: change-me

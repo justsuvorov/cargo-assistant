@@ -175,8 +175,8 @@ class Configured:
                 "чтобы работать с ним на обезличенных или вымышленных данных, "
                 "задайте LLM_ALLOW_EXTERNAL=true"
             )
-        self._journal.info(
-            f"Внимание: выбран внешний провайдер модели {name}, отправляйте ему только "
+        self._journal.warning(
+            f"Выбран внешний провайдер модели {name}, отправляйте ему только "
             "обезличенные или вымышленные данные",
             0,
             0,
@@ -194,8 +194,8 @@ class Configured:
 
     def _verify(self) -> ssl.SSLContext | bool:
         if not self._environment.llm_verify_tls:
-            self._journal.info(
-                "Внимание: проверка TLS-сертификата модели отключена настройкой LLM_VERIFY_TLS",
+            self._journal.warning(
+                "Проверка TLS-сертификата модели отключена настройкой LLM_VERIFY_TLS",
                 0,
                 0,
             )
