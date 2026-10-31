@@ -14,6 +14,9 @@ class Lines:
     def info(self, msg: str, *args: object) -> None:
         self.lines.append(msg % args)
 
+    def warning(self, msg: str, *args: object) -> None:
+        self.lines.append("W " + msg % args)
+
     def error(self, msg: str, *args: object) -> None:
         self.lines.append(msg % args)
 
@@ -37,4 +40,15 @@ def test_writes_job_and_declaration_into_error_line() -> None:
         sink.lines,
         equal_to([f"Задача упала, job_id={job}, declaration_id=0"]),
         "Error line does not name the job and the declaration",
+    )
+
+
+def test_writes_job_and_declaration_into_warning_line() -> None:
+    sink = Lines()
+    job, declaration = random.randint(1, 999), random.randint(1000, 9999)
+    LogJournal(sink).warning("Проверка отключена", job, declaration)
+    assert_that(
+        sink.lines,
+        equal_to([f"W Проверка отключена, job_id={job}, declaration_id={declaration}"]),
+        "Warning line does not name the job and the declaration",
     )

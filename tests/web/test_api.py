@@ -23,6 +23,9 @@ class Silent:
     def info(self, message: str, job_id: int, declaration_id: int) -> None:
         pass
 
+    def warning(self, message: str, job_id: int, declaration_id: int) -> None:
+        pass
+
     def error(self, message: str, job_id: int, declaration_id: int) -> None:
         pass
 

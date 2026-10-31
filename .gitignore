@@ -10,3 +10,4 @@ data/real/
 storage/
 *.sqlite3
 /.claude/
+deploy/k8s/secret.yaml

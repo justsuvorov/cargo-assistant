@@ -6,6 +6,8 @@ class Sink(Protocol):
 
     def info(self, msg: str, *args: object) -> None: ...
 
+    def warning(self, msg: str, *args: object) -> None: ...
+
     def error(self, msg: str, *args: object) -> None: ...
 
 
@@ -13,6 +15,8 @@ class Journal(Protocol):
     """Log of events that always names the job and the declaration they belong to."""
 
     def info(self, message: str, job_id: int, declaration_id: int) -> None: ...
+
+    def warning(self, message: str, job_id: int, declaration_id: int) -> None: ...
 
     def error(self, message: str, job_id: int, declaration_id: int) -> None: ...
 
@@ -28,6 +32,9 @@ class LogJournal:
 
     def info(self, message: str, job_id: int, declaration_id: int) -> None:
         self._sink.info("%s, job_id=%d, declaration_id=%d", message, job_id, declaration_id)
+
+    def warning(self, message: str, job_id: int, declaration_id: int) -> None:
+        self._sink.warning("%s, job_id=%d, declaration_id=%d", message, job_id, declaration_id)
 
     def error(self, message: str, job_id: int, declaration_id: int) -> None:
         self._sink.error("%s, job_id=%d, declaration_id=%d", message, job_id, declaration_id)
