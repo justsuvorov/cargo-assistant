@@ -1,7 +1,6 @@
 import json
 import random
 
-import httpx
 from hamcrest import assert_that, equal_to, starts_with
 
 from app.llm.claude import Claude
@@ -10,11 +9,11 @@ from app.llm.messages import System, User
 from app.llm.schema.shape import Shape
 from app.llm.wire import Keyed, Patient
 from tests.llm.answers import Journey
-from tests.llm.stub import Quiet, envelope, gateway
+from tests.llm.stub import Quiet, client, envelope, gateway
 
 
 def endpoint(url: str) -> Patient:
-    return Patient(Keyed(httpx.Client(), url, "k"), Rhythm(1, 0.0), 5.0, Quiet())
+    return Patient(Keyed(client(), url, "k"), Rhythm(1, 0.0), 5.0, Quiet())
 
 
 def test_constrains_answer_by_structured_output() -> None:

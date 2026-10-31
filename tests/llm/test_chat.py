@@ -1,7 +1,6 @@
 import json
 import random
 
-import httpx
 from hamcrest import assert_that, contains_string, equal_to
 
 from app.llm.chat import Budget, Chat, GoogleBudget, GuidedJson, JsonObject, JsonSchema, Prompted
@@ -11,11 +10,11 @@ from app.llm.messages import System, User
 from app.llm.schema.shape import Shape
 from app.llm.wire import Bearer, Patient
 from tests.llm.answers import Cargo
-from tests.llm.stub import Quiet, completion, gateway, silence
+from tests.llm.stub import Quiet, client, completion, gateway, silence
 
 
 def endpoint(url: str) -> Patient:
-    return Patient(Bearer(httpx.Client(), url, "k"), Rhythm(1, 0.0), 5.0, Quiet())
+    return Patient(Bearer(client(), url, "k"), Rhythm(1, 0.0), 5.0, Quiet())
 
 
 def test_sends_zero_temperature_and_token_limit() -> None:

@@ -1,12 +1,14 @@
 import json
 import socket
 import socketserver
+import ssl
 import threading
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import partial
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+import httpx
 
 from app.llm.deadline import Deadline
 from app.llm.errors import UnavailableError
@@ -17,7 +19,8 @@ from app.llm.schema.shape import Shape
 
 class Stub:
     """Local gateway script: answers in the given order, the last one repeating, and every
-    request body, header set and path is remembered."""
+    request body, header set and path is remembered; a delayed answer is dropped once the
+    gateway closes, so a hanging request never outlives its test."""
 
     def __init__(self, script: list[tuple[int, str, float]]) -> None:
         self.script = list(script)
@@ -25,6 +28,7 @@ class Stub:
         self.headers: list[dict[str, str]] = []
         self.paths: list[str] = []
         self.lock = threading.Lock()
+        self.closed = threading.Event()
         self.base = ""
 
     def url(self) -> str:
@@ -62,7 +66,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def answer(self, body: bytes) -> None:
         status, text, delay = self.stub.take(self.path, dict(self.headers.items()), body)
-        time.sleep(delay)
+        if self.stub.closed.wait(delay):
+            return
         payload = text.encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
@@ -81,9 +86,18 @@ def gateway(script: list[tuple[int, str, float]]) -> Iterator[Stub]:
     try:
         yield stub
     finally:
+        stub.closed.set()
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def client() -> httpx.Client:
+    return httpx.Client(verify=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT))
+
+
+def refusal(request: httpx.Request) -> httpx.Response:
+    raise httpx.ConnectError("Шлюз в тесте отказал в соединении", request=request)
 
 
 def completion(content: str, tokens: tuple[int, int] = (11, 7)) -> str:
