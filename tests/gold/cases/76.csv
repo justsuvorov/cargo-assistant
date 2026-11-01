@@ -1,14 +1,14 @@
-declaration,shipment,field,status,basis,note
-76,76,insurer,match,fsc-ok,
-76,76,policy,match,fsc-ok,
-76,76,cargo,match,fsc-ok,
-76,76,packaging,match,fsc-ok,
-76,76,beneficiary,match,fsc-ok,
-76,76,sum,match,fsc-note,"ФСЦ: ДС 4 относится к другой отгрузке; лимит ГП 900 млн (D-23), сумма ниже"
-76,76,transport,match,fsc-note,"ФСЦ: это автоперевозка, а не смешанная; авто разрешено, статус не оспорен"
-76,76,departure,mismatch,fsc-ok,
-76,76,destination,mismatch,fsc-ok,
-76,76,period,match,fsc-ok,
-76,76,document,match,fsc-ok,
-76,76,sealing,match,fsc-ok,
-76,76,other,match,fsc-ok,
+declaration,shipment,field,status,confidence,basis,clause,reason,note
+76,76,insurer,match,sure,fsc-ok,,,
+76,76,policy,match,sure,fsc-ok,,,
+76,76,cargo,match,sure,fsc-ok,,,
+76,76,packaging,match,sure,fsc-ok,,,
+76,76,beneficiary,match,sure,fsc-ok,,,
+76,76,sum,match,sure,fsc-note,,,"ФСЦ: ДС 4 относится к другой отгрузке; лимит ГП 900 млн (D-23), сумма ниже"
+76,76,transport,match,sure,fsc-note,,,"ФСЦ: это автоперевозка, а не смешанная; авто разрешено, статус не оспорен"
+76,76,departure,mismatch,sure,fsc-ok,,,
+76,76,destination,mismatch,sure,fsc-ok,,,
+76,76,period,match,sure,fsc-ok,,,
+76,76,document,match,sure,fsc-ok,,,
+76,76,sealing,match,sure,fsc-ok,,,
+76,76,other,match,sure,fsc-ok,,,

@@ -1,15 +1,15 @@
-declaration,shipment,field,status,basis,note
-107,107,insurer,match,fsc-ok,
-107,107,policy,match,fsc-ok,
-107,107,cargo,match,fsc-ok,
-107,107,packaging,match,fsc-ok,
-107,107,beneficiary,match,fsc-ok,
-107,107,sum,match,fsc-note,"ФСЦ: ДС 4 к другой отгрузке не применяется; лимит ГП 900 млн (D-23), сумма ниже"
-107,107,transport,match,fsc-ok,
-107,107,departure,match,fsc-note,ФСЦ: точный адрес не требуется
-107,107,transshipment,match,fsc-ok,
-107,107,destination,match,fsc-ok,
-107,107,period,match,fsc-ok,
-107,107,document,match,fsc-ok,
-107,107,carrier,match,fsc-note,"ФСЦ: перевозчик не сверяется, проверяется факт заполнения; поле заполнено"
-107,107,sealing,match,fsc-ok,
+declaration,shipment,field,status,confidence,basis,clause,reason,note
+107,107,insurer,match,sure,fsc-ok,,,
+107,107,policy,match,sure,fsc-ok,,,
+107,107,cargo,match,sure,fsc-ok,,,
+107,107,packaging,match,sure,fsc-ok,,,
+107,107,beneficiary,match,sure,fsc-ok,,,
+107,107,sum,match,sure,fsc-note,,,"ФСЦ: ДС 4 к другой отгрузке не применяется; лимит ГП 900 млн (D-23), сумма ниже"
+107,107,transport,match,sure,fsc-ok,,,
+107,107,departure,match,sure,fsc-note,,,ФСЦ: точный адрес не требуется
+107,107,transshipment,match,sure,fsc-ok,,,
+107,107,destination,match,sure,fsc-ok,,,
+107,107,period,match,sure,fsc-ok,,,
+107,107,document,match,sure,fsc-ok,,,
+107,107,carrier,match,sure,fsc-note,,,"ФСЦ: перевозчик не сверяется, проверяется факт заполнения; поле заполнено"
+107,107,sealing,match,sure,fsc-ok,,,
