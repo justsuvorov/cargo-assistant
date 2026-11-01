@@ -160,3 +160,31 @@ def test_deck_reads_titles_of_card_forms(tmp_path: Path) -> None:
         equal_to({"sum": {"vertical": "Страховая сумма", "psg": "Страховая сумма"}}),
         "Deck does not read the titles of card forms",
     )
+
+
+def test_deck_orders_fields_of_form_by_card_order(tmp_path: Path) -> None:
+    (tmp_path / "a.yaml").write_text(
+        "field: sum\nforms:\n  psg: {order: 13, title: Страховая сумма}\n", encoding="utf-8"
+    )
+    (tmp_path / "b.yaml").write_text(
+        "field: insurer\nforms:\n  psg: {order: 1, title: Страхователь}\n", encoding="utf-8"
+    )
+    (tmp_path / "c.yaml").write_text(
+        "field: sealing\nforms:\n  vertical: {order: 14, title: Пломбирование}\n", encoding="utf-8"
+    )
+    assert_that(
+        Deck(tmp_path).fields("psg"),
+        equal_to((("insurer", "Страхователь"), ("sum", "Страховая сумма"))),
+        "Deck does not order the fields of a form by the order of cards",
+    )
+
+
+def test_deck_refuses_form_without_fields(tmp_path: Path) -> None:
+    (tmp_path / "a.yaml").write_text(
+        "field: sum\nforms:\n  psg: {order: 13, title: Страховая сумма}\n", encoding="utf-8"
+    )
+    assert_that(
+        lambda: Deck(tmp_path).fields("vertical"),
+        raises(ValueError),
+        "Deck does not refuse a form that no card has",
+    )

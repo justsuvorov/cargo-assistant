@@ -22,7 +22,7 @@ def test_report_counts_correct_answer_by_field(tmp_path: Path) -> None:
     )
     verdict = Ruling(Spot("97", "sum"), Mismatch(), Cause("sum.over_limit", "rule"), Note("", ""))
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("97", Result((verdict,), 0), 0.5),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result((verdict,), 0, ()), 0.5),)).text(),
         contains_string("| sum | 1 | 1 | 100.0% | 0.0% | 0 |"),
         "Report does not count a correct answer in its field",
     )
@@ -34,7 +34,7 @@ def test_report_counts_missing_answer(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("97", Result((), 0), 0.5),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result((), 0, ()), 0.5),)).text(),
         contains_string("| cargo | 1 | 0 | 0.0% | 0.0% | 1 |"),
         "Report does not count a gold case without an answer",
     )
@@ -47,7 +47,7 @@ def test_report_shows_model_calls_of_declaration(tmp_path: Path) -> None:
     )
     calls = random.randint(1, 9)
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("274", Result((), calls), 2.0),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("274", Result((), calls, ()), 2.0),)).text(),
         contains_string(f"| 2.000 | {calls} |"),
         "Report does not show time and model calls of a declaration",
     )
@@ -60,7 +60,7 @@ def test_report_counts_answers_outside_gold(tmp_path: Path) -> None:
     )
     verdict = Ruling(Spot("97", "packaging"), Match(), Cause("x", "rule"), Note("", ""))
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("97", Result((verdict,), 0), 0.1),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result((verdict,), 0, ()), 0.1),)).text(),
         contains_string("Ответов вне эталона: 1."),
         "Report does not count answers for places outside the gold",
     )
@@ -73,7 +73,7 @@ def test_report_shows_expected_status_shares(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("97", Result((), 0), 0.1),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result((), 0, ()), 0.1),)).text(),
         contains_string("«не совпадает» 1 (50.0%)"),
         "Report does not show the share of each expected status",
     )
@@ -90,7 +90,7 @@ def test_report_scores_each_expected_status(tmp_path: Path) -> None:
         for field in ("sum", "cargo", "policy")
     )
     assert_that(
-        Report("x", Folder(tmp_path), (Timed("97", Result(verdicts, 0), 0.1),)).text(),
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result(verdicts, 0, ()), 0.1),)).text(),
         contains_string("| не совпадает | 1 | 0 | 0.0% | 0.0% | 0 |"),
         "Report does not score the cases of each expected status",
     )
@@ -131,4 +131,93 @@ def test_tally_scores_review_only_where_gold_expects_it(tmp_path: Path) -> None:
         Tally(Folder(tmp_path).samples(), answers).correct(),
         equal_to(1),
         "Tally does not score review only where the gold expects it",
+    )
+
+
+def test_tally_spreads_found_and_extra_answers_by_status(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status\n35,35/1,sum,match\n35,35/2,sum,mismatch\n"
+        "35,35/3,sum,mismatch\n35,35/4,sum,review\n",
+        encoding="utf-8",
+    )
+    answers = {
+        "35": tuple(
+            Ruling(Spot(shipment, "sum"), status, Cause("x", "rule"), Note("", ""))
+            for shipment, status in (
+                ("35/1", Mismatch()),
+                ("35/2", Mismatch()),
+                ("35/3", Match()),
+                ("35/4", Review()),
+            )
+        )
+    }
+    assert_that(
+        Tally(Folder(tmp_path).samples(), answers).spread(),
+        equal_to("0/1 | 1 | 1/2 | 1 | 1/1 | 0 |"),
+        "Tally does not spread found and extra answers by status",
+    )
+
+
+def test_report_leaves_disputed_lines_out_of_score(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status,confidence\n35,35,sum,match,sure\n"
+        "35,35,cargo,match,disputed\n",
+        encoding="utf-8",
+    )
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("35", Result((), 0, ()), 0.1),)).text(),
+        contains_string("В расчёте: случаев 1, деклараций 1; спорных строк вне расчёта 1."),
+        "Report does not leave disputed lines out of the score",
+    )
+
+
+def test_report_shows_edition_of_gold(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status\n35,35,sum,match\n", encoding="utf-8"
+    )
+    version = f"v{random.randint(2, 99)}, часть dev"
+    assert_that(
+        Report("x", version, Folder(tmp_path), (Timed("35", Result((), 0, ()), 0.1),)).text(),
+        contains_string(f"Эталон: {version}."),
+        "Report does not show the version of the gold",
+    )
+
+
+def test_report_lists_answers_beyond_gold(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status\n35,35/1,sum,match\n", encoding="utf-8"
+    )
+    verdicts = tuple(
+        Ruling(Spot(shipment, "sum"), Review(), Cause("x", "rule"), Note("", ""))
+        for shipment in ("035/1", "035/2")
+    )
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("35", Result(verdicts, 0, ()), 0.1),)).text(),
+        contains_string("- 35: лишних (1): 035/2 × sum"),
+        "Report does not list an answer in a place beyond the gold",
+    )
+
+
+def test_report_lists_faults_of_declaration(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status\n35,35,sum,match\n", encoding="utf-8"
+    )
+    assert_that(
+        Report(
+            "x", "v1", Folder(tmp_path), (Timed("35", Result((), 0, ("Файл не найден",)), 0.1),)
+        ).text(),
+        contains_string("- 35: причина: Файл не найден"),
+        "Report does not list the faults met on a declaration",
+    )
+
+
+def test_report_says_when_places_agree(tmp_path: Path) -> None:
+    (tmp_path / "35.csv").write_text(
+        "declaration,shipment,field,status\n35,35,sum,match\n", encoding="utf-8"
+    )
+    verdict = Ruling(Spot("35", "sum"), Review(), Cause("x", "rule"), Note("", ""))
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("35", Result((verdict,), 0, ()), 0.1),)).text(),
+        contains_string("Расхождений мест нет."),
+        "Report does not say that the places of gold and answer agree",
     )

@@ -100,9 +100,15 @@ class Titles(Protocol):
     def titles(self) -> dict[str, dict[str, str]]: ...
 
 
+class Forms(Protocol):
+    """Field keys of a declaration form with their result titles, in the order of the result."""
+
+    def fields(self, form: str) -> tuple[tuple[str, str], ...]: ...
+
+
 @final
 class Deck:
-    """Titles read from the forms section of rule cards, one YAML file per field key."""
+    """Titles and order of result rows read from the forms section of rule cards (D-14)."""
 
     __slots__ = ("_path",)
 
@@ -114,11 +120,25 @@ class Deck:
             str(card["field"]): {
                 str(form): str(spec["title"]) for form, spec in card["forms"].items()
             }
-            for card in (
-                yaml.safe_load(path.read_text(encoding="utf-8"))
-                for path in sorted(self._path.glob("*.yaml"))
-            )
+            for card in map(yaml.safe_load, self._texts())
         }
+
+    def fields(self, form: str) -> tuple[tuple[str, str], ...]:
+        rows = sorted(
+            (
+                int(card["forms"][form]["order"]),
+                str(card["field"]),
+                str(card["forms"][form]["title"]),
+            )
+            for card in map(yaml.safe_load, self._texts())
+            if form in card["forms"]
+        )
+        if not rows:
+            raise ValueError(f"В карточках {self._path} нет полей формы «{form}»")
+        return tuple((key, title) for _, key, title in rows)
+
+    def _texts(self) -> tuple[str, ...]:
+        return tuple(path.read_text(encoding="utf-8") for path in sorted(self._path.glob("*.yaml")))
 
 
 @final
