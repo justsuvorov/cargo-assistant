@@ -5,7 +5,8 @@ subject: "НЕ СВЕРЯЕТСЯ, ПРОВЕРЯЕТСЯ ФАКТ ЗАПОЛН�
 clause: none
 check: filled
 rule: "Указана хотя бы одна дата. Дат может быть несколько, формат любой, год может быть указан один раз."
-params: {}
+params:
+  parts: [date]
 if_empty: mismatch
 comments:
   match: "Дата указана"

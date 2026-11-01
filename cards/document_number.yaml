@@ -5,7 +5,8 @@ subject: "НЕ СВЕРЯЕТСЯ, ПРОВЕРЯЕТСЯ ФАКТ ЗАПОЛН�
 clause: none
 check: filled
 rule: "Указан хотя бы один номер. Номеров может быть несколько, формат любой."
-params: {}
+params:
+  parts: [number]
 if_empty: mismatch
 comments:
   match: "Номер указан"

@@ -87,7 +87,7 @@ timeout = 10
 xfail_strict = true
 
 [[tool.mypy.overrides]]
-module = ["app.core.schema.*", "app.llm.schema.*", "tests.llm.answers"]
+module = ["app.core.schema.*", "app.llm.schema.*", "app.rules.schema.*", "tests.llm.answers"]
 disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
