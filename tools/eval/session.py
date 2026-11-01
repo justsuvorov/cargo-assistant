@@ -3,6 +3,7 @@ from typing import Final, Protocol, final
 
 from app.domain.verdict import Verdict
 from tools.eval.gold import Gold
+from tools.eval.number import Aligned
 from tools.eval.pipeline import Outcome, Pipeline, Result
 
 
@@ -16,6 +17,8 @@ class Lap(Protocol):
     def calls(self) -> int: ...
 
     def verdicts(self) -> tuple[Verdict, ...]: ...
+
+    def faults(self) -> tuple[str, ...]: ...
 
 
 class Laps(Protocol):
@@ -47,10 +50,16 @@ class Timed:
     def verdicts(self) -> tuple[Verdict, ...]:
         return self._outcome.verdicts()
 
+    def faults(self) -> tuple[str, ...]:
+        return self._outcome.faults()
+
 
 @final
 class Session:
-    """Run that reconciles gold declarations one by one in the order they appear in the gold."""
+    """Run that reconciles gold declarations one by one in the order they appear in the gold.
+
+    Shipment numbers of the verdicts are compared with the gold by their digits (D-30).
+    """
 
     __slots__ = ("_gold", "_pipeline")
 
@@ -69,5 +78,5 @@ class Session:
     def _lap(self, declaration: str) -> Lap:
         start = time.perf_counter()
         outcome = self._pipeline.reconcile(declaration)
-        result = Result(outcome.verdicts(), outcome.calls())
+        result = Result(tuple(map(Aligned, outcome.verdicts())), outcome.calls(), outcome.faults())
         return Timed(declaration, result, time.perf_counter() - start)

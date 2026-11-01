@@ -20,7 +20,11 @@ class Paper(Protocol):
 
 @final
 class Cases:
-    """Gold files: one CSV per declaration with masked cells and a header of column names."""
+    """Gold files: one CSV per declaration with masked cells and a header of column names.
+
+    Lines of the draft come from FSC marks of MVP answers, so they are sure and have neither a
+    clause nor a reason of the expert.
+    """
 
     __slots__ = ("_folder", "_mask")
 
@@ -45,8 +49,23 @@ class Cases:
     def _table(self, entries: tuple[Entry, ...]) -> str:
         buffer = io.StringIO()
         writer = csv.writer(buffer, lineterminator="\n")
-        writer.writerow(("declaration", "shipment", "field", "status", "basis", "note"))
-        writer.writerows(tuple(map(self._mask.hide, entry.cells())) for entry in entries)
+        writer.writerow(
+            (
+                "declaration",
+                "shipment",
+                "field",
+                "status",
+                "confidence",
+                "basis",
+                "clause",
+                "reason",
+                "note",
+            )
+        )
+        writer.writerows(
+            tuple(map(self._mask.hide, (*cells[:4], "sure", cells[4], "", "", cells[5])))
+            for cells in (entry.cells() for entry in entries)
+        )
         return buffer.getvalue()
 
 

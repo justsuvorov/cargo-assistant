@@ -1,34 +1,34 @@
-declaration,shipment,field,status,basis,note
-114,114/1,insurer,match,fsc-ok,
-114,114/1,policy,match,fsc-ok,
-114,114/1,cargo,match,fsc-ok,
-114,114/1,document_number,match,fsc-ok,
-114,114/1,transport,match,fsc-note,ФСЦ: указания «авто» достаточно
-114,114/1,departure,match,fsc-ok,
-114,114/1,destination,mismatch,fsc-ok,
-114,114/1,sum,match,fsc-ok,
-114,114/2,period_start,match,fsc-ok,
-114,114/2,cargo,mismatch,fsc-ok,
-114,114/2,document_number,match,fsc-ok,
-114,114/2,transport,match,fsc-note,ФСЦ: указания «авто» достаточно
-114,114/2,departure,match,fsc-note,ФСЦ: тот же маршрут в 114/1 совпадает
-114,114/2,destination,match,fsc-note,ФСЦ: адреса достаточно
-114,114/2,sum,match,fsc-ok,
-114,114/3,insurer,match,fsc-ok,
-114,114/3,policy,match,fsc-ok,
-114,114/3,period_start,match,fsc-ok,
-114,114/3,cargo,mismatch,fsc-ok,
-114,114/3,document_number,match,fsc-ok,
-114,114/3,transport,match,fsc-note,ФСЦ: указания «авто» достаточно; пометка MVP — не статус
-114,114/3,departure,match,fsc-ok,
-114,114/3,destination,match,fsc-ok,
-114,114/3,sum,mismatch,fsc-ok,
-114,114/5,insurer,match,fsc-ok,
-114,114/5,policy,match,fsc-ok,
-114,114/5,period_start,match,fsc-ok,
-114,114/5,cargo,match,fsc-ok,
-114,114/5,document_number,match,fsc-ok,
-114,114/5,transport,match,fsc-note,ФСЦ: указания «авто» достаточно; пометка MVP — не статус
-114,114/5,departure,match,fsc-ok,
-114,114/5,destination,match,fsc-ok,
-114,114/5,sum,match,fsc-ok,
+declaration,shipment,field,status,confidence,basis,clause,reason,note
+114,114/1,insurer,match,sure,fsc-ok,,,
+114,114/1,policy,match,sure,fsc-ok,,,
+114,114/1,cargo,match,sure,fsc-ok,,,
+114,114/1,document_number,match,sure,fsc-ok,,,
+114,114/1,transport,match,sure,fsc-note,,,ФСЦ: указания «авто» достаточно
+114,114/1,departure,match,sure,fsc-ok,,,
+114,114/1,destination,mismatch,sure,fsc-ok,,,
+114,114/1,sum,match,sure,fsc-ok,,,
+114,114/2,period_start,match,sure,fsc-ok,,,
+114,114/2,cargo,mismatch,sure,fsc-ok,,,
+114,114/2,document_number,match,sure,fsc-ok,,,
+114,114/2,transport,match,sure,fsc-note,,,ФСЦ: указания «авто» достаточно
+114,114/2,departure,match,sure,fsc-note,,,ФСЦ: тот же маршрут в 114/1 совпадает
+114,114/2,destination,match,sure,fsc-note,,,ФСЦ: адреса достаточно
+114,114/2,sum,match,sure,fsc-ok,,,
+114,114/3,insurer,match,sure,fsc-ok,,,
+114,114/3,policy,match,sure,fsc-ok,,,
+114,114/3,period_start,match,sure,fsc-ok,,,
+114,114/3,cargo,mismatch,sure,fsc-ok,,,
+114,114/3,document_number,match,sure,fsc-ok,,,
+114,114/3,transport,match,sure,fsc-note,,,ФСЦ: указания «авто» достаточно; пометка MVP — не статус
+114,114/3,departure,match,sure,fsc-ok,,,
+114,114/3,destination,match,sure,fsc-ok,,,
+114,114/3,sum,mismatch,sure,fsc-ok,,,
+114,114/5,insurer,match,sure,fsc-ok,,,
+114,114/5,policy,match,sure,fsc-ok,,,
+114,114/5,period_start,match,sure,fsc-ok,,,
+114,114/5,cargo,match,sure,fsc-ok,,,
+114,114/5,document_number,match,sure,fsc-ok,,,
+114,114/5,transport,match,sure,fsc-note,,,ФСЦ: указания «авто» достаточно; пометка MVP — не статус
+114,114/5,departure,match,sure,fsc-ok,,,
+114,114/5,destination,match,sure,fsc-ok,,,
+114,114/5,sum,match,sure,fsc-ok,,,

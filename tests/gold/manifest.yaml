@@ -1,0 +1,46 @@
+version: v1
+log:
+- version: v1
+  date: '2026-10-31'
+  change: 'Черновой эталон из разметки ФСЦ ответов MVP: 232 строки, 11 деклараций (T-03)'
+  reason: Нулевая точка до разметки по шаблону; правило вывода статуса — tests/gold/README.md
+  confirmed: Решения D-22 и D-23 — пользователь; остальное — черновик, ждёт подтверждения пользователя
+- version: v1
+  date: '2026-10-31'
+  change: 'Формат CSV: колонки confidence, clause, reason; деление деклараций на dev и holdout (T-05)'
+  reason: Загрузка шаблонов разметки ФСЦ и честная контрольная часть; места и статусы не менялись
+  confirmed: Статусы не менялись; деление на части ждёт подтверждения пользователя
+declarations:
+  '005':
+    policy: Полис-1
+    part: dev
+  '35':
+    policy: Полис-2
+    part: dev
+  '70':
+    policy: Полис-3
+    part: dev
+  '107':
+    policy: Полис-4
+    part: dev
+  '76':
+    policy: Полис-4
+    part: dev
+  '97':
+    policy: Полис-4
+    part: dev
+  '113':
+    policy: Полис-5
+    part: dev
+  '114':
+    policy: Полис-5
+    part: dev
+  '164':
+    policy: Полис-6
+    part: holdout
+  '263':
+    policy: Полис-7
+    part: holdout
+  '271':
+    policy: Полис-8
+    part: holdout
