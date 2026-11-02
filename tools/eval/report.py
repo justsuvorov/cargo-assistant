@@ -23,11 +23,45 @@ class Score(Protocol):
 
     def spread(self) -> str: ...
 
+    def cross(self, title: str) -> tuple[str, ...]: ...
+
+    def causes(self, title: str) -> tuple[str, ...]: ...
+
 
 class Page(Protocol):
     """Text of a document produced by eval."""
 
     def text(self) -> str: ...
+
+
+_STATUSES: tuple[Status, ...] = (Match(), Mismatch(), Review())
+_FIELDS = (
+    " «совпадает»: найдено | лишних | «не совпадает»: найдено | лишних "
+    "| «требует проверки»: найдено | лишних |"
+)
+
+
+def _header(title: str) -> str:
+    return f"| {title} | Случаев | Верно | Точность | Ответ «требует проверки» | Нет ответа |"
+
+
+def _answers(laps: tuple[Lap, ...]) -> dict[str, tuple[Verdict, ...]]:
+    return {lap.declaration(): lap.verdicts() for lap in laps}
+
+
+def _scores(
+    samples: tuple[Sample, ...], answers: Mapping[str, tuple[Verdict, ...]]
+) -> tuple[str, ...]:
+    return (
+        _header("Поле") + _FIELDS,
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
+        *(
+            tally.row(field) + " " + tally.spread()
+            for field in sorted({sample.place().field() for sample in samples})
+            for tally in (Tally(tuple(s for s in samples if s.place().field() == field), answers),)
+        ),
+        Tally(samples, answers).row("**Итого**") + " " + Tally(samples, answers).spread(),
+    )
 
 
 @final
@@ -67,7 +101,42 @@ class Tally:
         )
 
     def spread(self) -> str:
-        return " ".join(self._hits(status) for status in (Match(), Mismatch(), Review()))
+        return " ".join(self._hits(status) for status in _STATUSES)
+
+    def cross(self, title: str) -> tuple[str, ...]:
+        return tuple(
+            f"| {title} | {expected.text()} | {len(group)} | "
+            + " | ".join(
+                str(
+                    sum(
+                        1
+                        for sample in group
+                        for verdict in self._first(sample)
+                        if verdict.status().key() == given.key()
+                    )
+                )
+                for given in _STATUSES
+            )
+            + f" | {sum(1 for sample in group if not self._first(sample))} |"
+            for expected in _STATUSES
+            for group in (tuple(s for s in self._samples if s.status().key() == expected.key()),)
+            if group
+        )
+
+    def causes(self, title: str) -> tuple[str, ...]:
+        given = Counter(
+            verdict.reason().code() for sample in self._samples for verdict in self._first(sample)
+        )
+        right = Counter(
+            verdict.reason().code()
+            for sample in self._samples
+            for verdict in self._first(sample)
+            if sample.agrees(verdict)
+        )
+        return tuple(
+            f"| {title} | {code} | {count} | {right[code]} |"
+            for code, count in sorted(given.items())
+        )
 
     def _hits(self, status: Status) -> str:
         expected = tuple(s for s in self._samples if s.status().key() == status.key())
@@ -128,6 +197,18 @@ class Report:
                 "",
                 *self._statuses(samples),
                 "",
+                "## Матрица статусов по полям",
+                "",
+                "Строка — ожидаемый статус эталона, колонки — статус ответа в тех же местах.",
+                "",
+                *self._matrix(samples),
+                "",
+                "## Коды причин по полям",
+                "",
+                "Код причины первого ответа в месте эталона и сколько таких ответов верны.",
+                "",
+                *self._causes(samples),
+                "",
                 "## Декларации",
                 "",
                 *self._declarations(samples),
@@ -143,9 +224,6 @@ class Report:
                 "",
             )
         )
-
-    def _answers(self) -> dict[str, tuple[Verdict, ...]]:
-        return {lap.declaration(): lap.verdicts() for lap in self._laps}
 
     def _preamble(self, samples: tuple[Sample, ...], disputed: int) -> tuple[str, ...]:
         expected = Counter(sample.status().text() for sample in samples)
@@ -165,30 +243,43 @@ class Report:
             + ".",
         )
 
-    def _header(self, title: str) -> str:
-        return f"| {title} | Случаев | Верно | Точность | Ответ «требует проверки» | Нет ответа |"
-
     def _fields(self, samples: tuple[Sample, ...]) -> tuple[str, ...]:
-        answers = self._answers()
+        return _scores(samples, _answers(self._laps))
+
+    def _matrix(self, samples: tuple[Sample, ...]) -> tuple[str, ...]:
+        answers = _answers(self._laps)
         return (
-            self._header("Поле")
-            + " «совпадает»: найдено | лишних | «не совпадает»: найдено | лишних "
-            "| «требует проверки»: найдено | лишних |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Поле | Ожидается | Случаев | → совпадает | → не совпадает | → требует проверки "
+            "| Нет ответа |",
+            "|---|---|---|---|---|---|---|",
             *(
-                tally.row(field) + " " + tally.spread()
+                row
                 for field in sorted({sample.place().field() for sample in samples})
-                for tally in (
-                    Tally(tuple(s for s in samples if s.place().field() == field), answers),
-                )
+                for row in Tally(
+                    tuple(s for s in samples if s.place().field() == field), answers
+                ).cross(field)
             ),
-            Tally(samples, answers).row("**Итого**") + " " + Tally(samples, answers).spread(),
+            *Tally(samples, answers).cross("**Итого**"),
+        )
+
+    def _causes(self, samples: tuple[Sample, ...]) -> tuple[str, ...]:
+        answers = _answers(self._laps)
+        return (
+            "| Поле | Код причины | Ответов | Верно |",
+            "|---|---|---|---|",
+            *(
+                row
+                for field in sorted({sample.place().field() for sample in samples})
+                for row in Tally(
+                    tuple(s for s in samples if s.place().field() == field), answers
+                ).causes(field)
+            ),
         )
 
     def _statuses(self, samples: tuple[Sample, ...]) -> tuple[str, ...]:
-        answers = self._answers()
+        answers = _answers(self._laps)
         return (
-            self._header("Ожидается"),
+            _header("Ожидается"),
             "|---|---|---|---|---|---|",
             *(
                 Tally(tuple(s for s in samples if s.status().text() == text), answers).row(text)
@@ -197,15 +288,20 @@ class Report:
         )
 
     def _declarations(self, samples: tuple[Sample, ...]) -> tuple[str, ...]:
-        answers = self._answers()
+        answers = _answers(self._laps)
         return (
-            f"{self._header('Декларация')} Время, с | Вызовов LLM |",
-            "|---|---|---|---|---|---|---|---|",
+            f"{_header('Декларация')} Время, с | Вызовов LLM | Стадии, с |",
+            "|---|---|---|---|---|---|---|---|---|",
             *(
                 Tally(
                     tuple(s for s in samples if s.declaration() == lap.declaration()), answers
                 ).row(lap.declaration())
-                + f" {lap.seconds():.3f} | {lap.calls()} |"
+                + f" {lap.seconds():.3f} | {lap.calls()} | "
+                + (
+                    ", ".join(f"{name} {seconds:.3f}" for name, seconds in lap.stages().items())
+                    or "—"
+                )
+                + " |"
                 for lap in self._laps
             ),
         )
@@ -217,10 +313,30 @@ class Report:
             f"Время на декларацию: среднее {mean:.3f} с, "
             f"максимум {slowest.seconds():.3f} с (декл. {slowest.declaration()}).",
             "",
+            *self._stages(),
             f"Вызовов LLM: всего {sum(lap.calls() for lap in self._laps)}, "
             f"максимум на декларацию {max(lap.calls() for lap in self._laps)}.",
             "",
             f"Ответов вне эталона: {sum(len(self._extra(lap, everything)) for lap in self._laps)}.",
+        )
+
+    def _stages(self) -> tuple[str, ...]:
+        return tuple(
+            line
+            for name in dict.fromkeys(name for lap in self._laps for name in lap.stages())
+            for timed in (
+                tuple(
+                    (lap.stages()[name], lap.declaration())
+                    for lap in self._laps
+                    if name in lap.stages()
+                ),
+            )
+            for line in (
+                f"Стадия «{name}»: среднее "
+                f"{sum(seconds for seconds, _ in timed) / len(timed):.3f} с, максимум "
+                f"{max(timed)[0]:.3f} с (декл. {max(timed)[1]}).",
+                "",
+            )
         )
 
     def _gaps(self, everything: tuple[Sample, ...]) -> tuple[str, ...]:
@@ -250,4 +366,41 @@ class Report:
             f"{verdict.place().shipment()} × {verdict.place().field()}"
             for verdict in lap.verdicts()
             if not any(sample.place().same(verdict.place()) for sample in own)
+        )
+
+
+@final
+class Excerpt:
+    """Section of an eval report that scores a chosen group of fields apart from the rest,
+    such as the fields that a check decides without a policy profile."""
+
+    __slots__ = ("_fields", "_gold", "_laps", "_title")
+
+    def __init__(
+        self, title: str, fields: frozenset[str], gold: Gold, laps: tuple[Lap, ...]
+    ) -> None:
+        self._title: Final = title
+        self._fields: Final = fields
+        self._gold: Final = gold
+        self._laps: Final = laps
+
+    def text(self) -> str:
+        samples = tuple(
+            sample
+            for sample in self._gold.samples()
+            if sample.sure() and sample.place().field() in self._fields
+        )
+        return "\n".join(
+            (
+                f"## {self._title}",
+                "",
+                f"Поля: {', '.join(sorted(self._fields))}.",
+                "",
+                *(
+                    _scores(samples, _answers(self._laps))
+                    if samples
+                    else ("В эталоне нет уверенных строк этих полей.",)
+                ),
+                "",
+            )
         )

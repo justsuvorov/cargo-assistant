@@ -1,10 +1,11 @@
 import time
+from collections.abc import Mapping
 from typing import Final, Protocol, final
 
 from app.domain.verdict import Verdict
 from tools.eval.gold import Gold
 from tools.eval.number import Aligned
-from tools.eval.pipeline import Outcome, Pipeline, Result
+from tools.eval.pipeline import Outcome, Pipeline, Result, Staged
 
 
 class Lap(Protocol):
@@ -19,6 +20,8 @@ class Lap(Protocol):
     def verdicts(self) -> tuple[Verdict, ...]: ...
 
     def faults(self) -> tuple[str, ...]: ...
+
+    def stages(self) -> Mapping[str, float]: ...
 
 
 class Laps(Protocol):
@@ -53,6 +56,9 @@ class Timed:
     def faults(self) -> tuple[str, ...]:
         return self._outcome.faults()
 
+    def stages(self) -> Mapping[str, float]:
+        return self._outcome.stages()
+
 
 @final
 class Session:
@@ -78,5 +84,8 @@ class Session:
     def _lap(self, declaration: str) -> Lap:
         start = time.perf_counter()
         outcome = self._pipeline.reconcile(declaration)
-        result = Result(tuple(map(Aligned, outcome.verdicts())), outcome.calls(), outcome.faults())
+        result = Staged(
+            Result(tuple(map(Aligned, outcome.verdicts())), outcome.calls(), outcome.faults()),
+            outcome.stages(),
+        )
         return Timed(declaration, result, time.perf_counter() - start)

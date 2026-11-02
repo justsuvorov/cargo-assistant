@@ -9,8 +9,8 @@ from app.domain.remark import Note
 from app.domain.status import Match, Mismatch, Review
 from app.domain.verdict import Ruling
 from tools.eval.gold import Folder
-from tools.eval.pipeline import Result
-from tools.eval.report import Report, Tally
+from tools.eval.pipeline import Result, Staged
+from tools.eval.report import Excerpt, Report, Tally
 from tools.eval.session import Timed
 
 
@@ -208,6 +208,100 @@ def test_report_lists_faults_of_declaration(tmp_path: Path) -> None:
         ).text(),
         contains_string("- 35: причина: Файл не найден"),
         "Report does not list the faults met on a declaration",
+    )
+
+
+def test_report_crosses_expected_and_given_status_by_field(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97/1,sum,mismatch\n97,97/2,sum,mismatch\n"
+        "97,97/3,sum,mismatch\n",
+        encoding="utf-8",
+    )
+    verdicts = tuple(
+        Ruling(Spot(shipment, "sum"), status, Cause("x", "rule"), Note("", ""))
+        for shipment, status in (("97/1", Match()), ("97/2", Review()))
+    )
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result(verdicts, 0, ()), 0.1),)).text(),
+        contains_string("| sum | не совпадает | 3 | 1 | 0 | 1 | 1 |"),
+        "Report does not cross the expected and the given status of a field",
+    )
+
+
+def test_report_counts_reason_codes_by_field(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97/1,sum,review\n97,97/2,sum,match\n",
+        encoding="utf-8",
+    )
+    verdicts = tuple(
+        Ruling(Spot(shipment, "sum"), Review(), Cause("clause.absent", "rule"), Note("", ""))
+        for shipment in ("97/1", "97/2")
+    )
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("97", Result(verdicts, 0, ()), 0.1),)).text(),
+        contains_string("| sum | clause.absent | 2 | 1 |"),
+        "Report does not count the reason codes of the answers in a field",
+    )
+
+
+def test_report_shows_stage_seconds_of_declaration(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97,sum,match\n", encoding="utf-8"
+    )
+    outcome = Staged(Result((), 0, ()), {"разбор": 0.25, "проверки": 0.125})
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), (Timed("97", outcome, 0.4),)).text(),
+        contains_string("| 0.400 | 0 | разбор 0.250, проверки 0.125 |"),
+        "Report does not show the stage seconds of a declaration",
+    )
+
+
+def test_report_sums_up_each_stage(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97,sum,match\n35,35,sum,match\n", encoding="utf-8"
+    )
+    laps = (
+        Timed("97", Staged(Result((), 0, ()), {"разбор": 0.5}), 0.5),
+        Timed("35", Staged(Result((), 0, ()), {"разбор": 1.5}), 1.5),
+    )
+    assert_that(
+        Report("x", "v1", Folder(tmp_path), laps).text(),
+        contains_string("Стадия «разбор»: среднее 1.000 с, максимум 1.500 с (декл. 35)."),
+        "Report does not sum up the seconds of each stage",
+    )
+
+
+def test_excerpt_scores_only_its_fields(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97,sum,match\n97,97,cargo,match\n",
+        encoding="utf-8",
+    )
+    verdict = Ruling(Spot("97", "sum"), Match(), Cause("x", "rule"), Note("", ""))
+    assert_that(
+        Excerpt(
+            "Поля без полиса",
+            frozenset({"sum"}),
+            Folder(tmp_path),
+            (Timed("97", Result((verdict,), 0, ()), 0.1),),
+        ).text(),
+        contains_string("| **Итого** | 1 | 1 | 100.0% | 0.0% | 0 |"),
+        "Excerpt does not score only the fields it was given",
+    )
+
+
+def test_excerpt_names_its_fields(tmp_path: Path) -> None:
+    (tmp_path / "97.csv").write_text(
+        "declaration,shipment,field,status\n97,97,sum,match\n", encoding="utf-8"
+    )
+    assert_that(
+        Excerpt(
+            "Поля без полиса",
+            frozenset({"sum", "sealing"}),
+            Folder(tmp_path),
+            (Timed("97", Result((), 0, ()), 0.1),),
+        ).text(),
+        contains_string("## Поля без полиса\n\nПоля: sealing, sum."),
+        "Excerpt does not name the fields it scores",
     )
 
 

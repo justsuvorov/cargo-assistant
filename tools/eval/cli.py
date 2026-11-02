@@ -17,8 +17,8 @@ from tools.eval.manifest import Manifest, Part, Split
 from tools.eval.marking import Additions, Markings
 from tools.eval.mask import Anonymity
 from tools.eval.paper import Cases, Questions, Summary
-from tools.eval.pipeline import Parsed, Pipeline, Uniform
-from tools.eval.report import Report
+from tools.eval.pipeline import Checked, Parsed, Pipeline, Uniform
+from tools.eval.report import Excerpt, Report
 from tools.eval.rulings import Rulings
 from tools.eval.session import Session
 from tools.eval.sheet import Workbooks
@@ -58,9 +58,15 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument("--gold", type=Path, default=Path("tests/gold/cases"))
     run.add_argument("--manifest", type=Path, default=Path("tests/gold/manifest.yaml"))
     run.add_argument("--part", choices=tuple(_PARTS), default="dev")
-    run.add_argument("--pipeline", choices=("stub", "match", "parsed"), default="stub")
+    run.add_argument("--pipeline", choices=("stub", "match", "parsed", "checked"), default="stub")
     run.add_argument("--real", type=Path, default=real)
     run.add_argument("--cards", type=Path, default=Path("cards"))
+    run.add_argument(
+        "--standalone",
+        default="packaging,sealing,other,beneficiary,document,document_date,document_number,"
+        "transshipment,carrier",
+        help="поля через запятую, которые без профиля полиса решаются сами; их точность — отдельно",
+    )
     run.add_argument("--out", type=Path, default=Path("-"))
     template = commands.add_parser("template", help="создать шаблон разметки по декларации")
     template.add_argument("declaration", type=Path)
@@ -97,14 +103,20 @@ def _run(args: argparse.Namespace) -> int:
     if not gold.samples():
         raise ValueError(f"В части {args.part} эталона {args.gold} нет ни одной строки")
     title, pipeline = _pipeline(args, gold)
+    laps = Session(gold, pipeline).laps()
     _emit(
         args.out,
-        Report(
-            title,
-            f"версия {manifest.version()}, часть {args.part}",
-            gold,
-            Session(gold, pipeline).laps(),
-        ).text(),
+        "\n".join(
+            (
+                Report(title, f"версия {manifest.version()}, часть {args.part}", gold, laps).text(),
+                Excerpt(
+                    "Поля, которые без полиса решаются сами",
+                    frozenset(key.strip() for key in args.standalone.split(",") if key.strip()),
+                    gold,
+                    laps,
+                ).text(),
+            )
+        ),
     )
     return 0
 
@@ -114,6 +126,12 @@ def _pipeline(args: argparse.Namespace, gold: Gold) -> tuple[str, Pipeline]:
         return (
             "разбор деклараций app.declarations с заглушкой проверок (везде «требует проверки»)",
             Parsed(Shelf(args.real).catalog(), Deck(args.cards)),
+        )
+    if args.pipeline == "checked":
+        return (
+            "разбор app.declarations и проверки по карточкам app.rules без профиля полиса "
+            "(Vacant), смысловые проверки — заглушка «требует проверки»",
+            Checked(Shelf(args.real).catalog(), args.cards),
         )
     stubs = {
         "stub": (

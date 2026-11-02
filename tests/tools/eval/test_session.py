@@ -11,7 +11,7 @@ from app.domain.remark import Note
 from app.domain.status import Review
 from app.domain.verdict import Ruling
 from tools.eval.gold import Folder
-from tools.eval.pipeline import Outcome, Result, Uniform
+from tools.eval.pipeline import Outcome, Result, Staged, Uniform
 from tools.eval.session import Session, Timed
 
 
@@ -92,6 +92,20 @@ def test_timed_lap_keeps_seconds() -> None:
         Timed("274", Result((), 3, ()), seconds).seconds(),
         equal_to(seconds),
         "Timed lap does not keep the measured seconds",
+    )
+
+
+def test_session_keeps_stages_of_pipeline(tmp_path: Path) -> None:
+    (tmp_path / "70.csv").write_text(
+        "declaration,shipment,field,status\n70,70,sum,review\n", encoding="utf-8"
+    )
+    seconds = random.uniform(0.1, 5.0)
+    assert_that(
+        Session(Folder(tmp_path), _Fixed({"70": Staged(Result((), 0, ()), {"разбор": seconds})}))
+        .laps()[0]
+        .stages(),
+        equal_to({"разбор": seconds}),
+        "Session does not keep the stage seconds of the pipeline",
     )
 
 
