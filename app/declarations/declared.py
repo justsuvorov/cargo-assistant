@@ -40,12 +40,17 @@ class Numbered:
 
 @final
 class Declared:
-    """Declaration read from a book without any model: its best fitting sheet gives all."""
+    """Declaration read from a book without any model: its best fitting sheet gives all.
 
-    __slots__ = ("_book",)
+    The book is read and its sheets are ranked on the first question only; the chosen layout
+    is then remembered, so every next question is answered from it.
+    """
+
+    __slots__ = ("_book", "_chosen")
 
     def __init__(self, book: Book) -> None:
         self._book: Final = book
+        self._chosen: Final[list[Layout]] = []
 
     def number(self) -> str:
         return self._layout().number()
@@ -65,6 +70,11 @@ class Declared:
         return tuple(Numbered(number, len(records), record) for record in records)
 
     def _layout(self) -> Layout:
+        if not self._chosen:
+            self._chosen.append(self._ranked())
+        return self._chosen[0]
+
+    def _ranked(self) -> Layout:
         ranked = sorted(
             (layout for sheet in self._book.sheets() for layout in (Vertical(sheet), Psg(sheet))),
             key=lambda layout: -layout.score(),
