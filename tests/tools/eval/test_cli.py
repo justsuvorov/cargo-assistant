@@ -232,6 +232,71 @@ def test_run_lists_places_that_parser_did_not_find(tmp_path: Path) -> None:
     )
 
 
+def _rules(folder: Path) -> Path:
+    folder.mkdir()
+    (folder / "cargo.yaml").write_text(
+        "field: cargo\nforms:\n  psg: {order: 5, title: Наименование груза}\n"
+        "subject: Груз\nclause: none\ncheck: filled\nrule: Поле заполнено\nif_empty: mismatch\n"
+        'comments: {match: "Заполнено", mismatch: "Пусто", review: "Проверить"}\nstatus: draft\n',
+        encoding="utf-8",
+    )
+    return folder
+
+
+def test_run_checks_declarations_by_rule_cards(tmp_path: Path) -> None:
+    _declaration(tmp_path / "real" / "35" / "35.xlsx", 35, "0000T00GR0000", 2)
+    main(
+        [
+            "run",
+            "--gold",
+            str(_gold(tmp_path / "gold", "35,35/1,cargo,match,sure\n35,35/2,cargo,match,sure\n")),
+            "--manifest",
+            str(_manifest(tmp_path / "manifest.yaml", {"35": "dev"})),
+            "--pipeline",
+            "checked",
+            "--real",
+            str(tmp_path / "real"),
+            "--cards",
+            str(_rules(tmp_path / "cards")),
+            "--out",
+            str(tmp_path / "report.md"),
+        ]
+    )
+    assert_that(
+        (tmp_path / "report.md").read_text(encoding="utf-8"),
+        contains_string("| **Итого** | 2 | 2 | 100.0% | 0.0% | 0 |"),
+        "Run does not check the declarations by the rule cards",
+    )
+
+
+def test_run_scores_fields_decided_without_policy_apart(tmp_path: Path) -> None:
+    _declaration(tmp_path / "real" / "35" / "35.xlsx", 35, "0000T00GR0000", 1)
+    main(
+        [
+            "run",
+            "--gold",
+            str(_gold(tmp_path / "gold", "35,35,cargo,match,sure\n")),
+            "--manifest",
+            str(_manifest(tmp_path / "manifest.yaml", {"35": "dev"})),
+            "--pipeline",
+            "checked",
+            "--real",
+            str(tmp_path / "real"),
+            "--cards",
+            str(_rules(tmp_path / "cards")),
+            "--standalone",
+            "cargo,sealing",
+            "--out",
+            str(tmp_path / "report.md"),
+        ]
+    )
+    assert_that(
+        (tmp_path / "report.md").read_text(encoding="utf-8"),
+        contains_string("Поля: cargo, sealing."),
+        "Run does not score the fields decided without a policy apart",
+    )
+
+
 def test_template_writes_marking_file_named_by_declaration(tmp_path: Path) -> None:
     number = random.randint(100, 999)
     _declaration(tmp_path / "d.xlsx", number, "0000T00GR0000", 2)
