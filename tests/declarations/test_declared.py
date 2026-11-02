@@ -12,6 +12,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from app.declarations.declared import Declared
 from app.domain.errors import UnreadableError
+from app.ingest.book import Line, Sheet
 from app.ingest.source import Source
 
 _KEYS = (
@@ -35,6 +36,29 @@ _KEYS = (
     "sealing",
     "other",
 )
+
+
+class _Counted:
+    def __init__(self, sheet: Sheet, calls: list[str]) -> None:
+        self._sheet = sheet
+        self._calls = calls
+
+    def name(self) -> str:
+        return self._sheet.name()
+
+    def lines(self) -> tuple[Line, ...]:
+        self._calls.append("lines")
+        return self._sheet.lines()
+
+
+class _Watched:
+    def __init__(self, book: Source, calls: list[str]) -> None:
+        self._book = book
+        self._calls = calls
+
+    def sheets(self) -> tuple[Sheet, ...]:
+        self._calls.append("sheets")
+        return tuple(_Counted(sheet, self._calls) for sheet in self._book.sheets())
 
 
 def _word() -> str:
@@ -263,4 +287,38 @@ def test_parses_a_declaration_of_sixty_one_rows_in_less_than_a_second(tmp_path: 
         len(shipments) == 61 and time.perf_counter() - begin < 1.0,
         equal_to(True),
         "Parsing of a declaration of sixty one rows is not faster than one second",
+    )
+
+
+def test_reads_the_book_once_for_number_form_policy_and_shipments(tmp_path: Path) -> None:
+    book = Workbook()
+    _vertical(book.create_sheet("Декларация"), datetime(2026, 9, 21))
+    book.save(tmp_path / "a.xlsx")
+    calls: list[str] = []
+    declared = Declared(_Watched(Source(tmp_path / "a.xlsx"), calls))
+    declared.number()
+    declared.form()
+    declared.policy()
+    declared.shipments()
+    assert_that(
+        calls.count("sheets"),
+        equal_to(1),
+        "Declared does not read the book once for all its questions",
+    )
+
+
+def test_ranks_the_sheets_once_however_many_times_it_is_asked(tmp_path: Path) -> None:
+    book = Workbook()
+    _vertical(book.create_sheet("Декларация"), datetime(2026, 9, 21))
+    book.save(tmp_path / "a.xlsx")
+    calls: list[str] = []
+    declared = Declared(_Watched(Source(tmp_path / "a.xlsx"), calls))
+    declared.form()
+    once = len(calls)
+    declared.form()
+    declared.form()
+    assert_that(
+        len(calls),
+        equal_to(once),
+        "Declared does not rank the layouts of the sheets only once",
     )
