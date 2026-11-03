@@ -44,6 +44,8 @@ class Evidence(Protocol):
 
     def names(self, point: str) -> bool: ...
 
+    def numbered(self, point: str) -> bool: ...
+
     def quotes(self, phrase: str) -> bool: ...
 
 
@@ -85,6 +87,18 @@ class Original:
                 rf"{re.escape(point)}(?!\d|\.\d)",
                 self._text,
                 re.IGNORECASE,
+            )
+        )
+
+    def numbered(self, point: str) -> bool:
+        return self.names(point) or (
+            bool(point)
+            and bool(
+                re.search(
+                    rf"(?:^|\|)[^\S\n]*{re.escape(point)}(?!\d|\.\d)",
+                    self._text,
+                    re.MULTILINE,
+                )
             )
         )
 
