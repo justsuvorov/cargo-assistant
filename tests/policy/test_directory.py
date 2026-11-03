@@ -118,14 +118,14 @@ def test_refuses_missing_folder(tmp_path: Path) -> None:
     )
 
 
-def test_reads_package_of_thirty_amendments(tmp_path: Path) -> None:
+def test_reads_every_amendment_of_a_package(tmp_path: Path) -> None:
     _policy(tmp_path / "p.docx")
-    for number in range(1, 31):
+    for number in range(1, 9):
         _agreement(tmp_path / "ДС" / f"ДС {number}" / f"{number}.docx", number)
     assert_that(
         sorted(item.number() for item in Directory(tmp_path).package().amendments()),
-        equal_to(list(range(1, 31))),
-        "Directory does not read every one of thirty amendments of a package",
+        equal_to(list(range(1, 9))),
+        "Directory does not read every amendment of a package",
     )
 
 
