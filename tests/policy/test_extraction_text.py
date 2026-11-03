@@ -378,3 +378,67 @@ def test_refuses_an_empty_phrase() -> None:
         equal_to(False),
         "Empty phrase is not refused",
     )
+
+
+def test_numbers_a_paragraph_that_begins_a_line() -> None:
+    assert_that(
+        Original("Условия:\n12.5. Лимит").numbered("12.5"),
+        equal_to(True),
+        "Paragraph that begins a line is not found by its number",
+    )
+
+
+def test_numbers_a_paragraph_after_spaces() -> None:
+    assert_that(
+        Original("   12.5 Лимит").numbered("12.5"),
+        equal_to(True),
+        "Paragraph after spaces is not found by its number",
+    )
+
+
+def test_numbers_a_paragraph_in_a_table_cell() -> None:
+    assert_that(
+        Original("Условия | 12.5 | Лимит").numbered("12.5"),
+        equal_to(True),
+        "Paragraph in a table cell is not found by its number",
+    )
+
+
+def test_numbers_a_paragraph_named_in_the_text() -> None:
+    assert_that(
+        Original("Лимит согласно п. 12.5 полиса").numbered("12.5"),
+        equal_to(True),
+        "Paragraph named in the text is not found by its number",
+    )
+
+
+def test_refuses_a_number_in_the_middle_of_a_sentence() -> None:
+    assert_that(
+        Original("Ставка составляет 12.5 процента").numbered("12.5"),
+        equal_to(False),
+        "Original does not refuse a number in the middle of a sentence",
+    )
+
+
+def test_refuses_a_number_that_only_begins_a_longer_one() -> None:
+    assert_that(
+        Original("12.5.1. Лимит").numbered("12.5"),
+        equal_to(False),
+        "Original does not refuse a number that only begins a longer one",
+    )
+
+
+def test_refuses_a_number_with_more_digits() -> None:
+    assert_that(
+        Original("12.55. Лимит").numbered("12.5"),
+        equal_to(False),
+        "Original does not refuse a number with more digits",
+    )
+
+
+def test_refuses_an_empty_number() -> None:
+    assert_that(
+        Original("12.5. Лимит").numbered(""),
+        equal_to(False),
+        "Original does not refuse an empty number",
+    )

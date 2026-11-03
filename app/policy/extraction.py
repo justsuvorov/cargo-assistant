@@ -17,11 +17,14 @@ _KEYS = (
     "key — вид условия: insurer — наименование страхователя; number — номер полиса, в dates его "
     "дата; term — срок действия, в dates начало и окончание; term_extension — полис действует до "
     "окончания ответственности по партиям, начатым в срок; limit — лимит на одну перевозку "
-    "(партию), в amounts; object — объект страхования; exclusions_cargo — исключённые грузы; "
+    "(партию), в amounts только сумма на одну партию; совокупные лимиты (за период, по всем "
+    "перевозкам, на несколько партий) — не limit, их не возвращай; object — объект страхования; "
+    "exclusions_cargo — исключённые грузы; "
     "transport — разрешённые виды транспорта; territory — территория и маршруты; "
     "exclusions_territory — исключённые территории; beneficiary — условия о выгодоприобретателе; "
     "carrier_risk — включён риск, требующий сверки с перечнем перевозчиков.\n"
-    "point — номер пункта цифрами, например 12.5, или пустая строка, если номера нет.\n"
+    "point — номер пункта цифрами, например 12.5, или пустая строка, если номера нет. На каждый "
+    "подпункт — отдельный объект со своим номером, подпункты не объединяй.\n"
     "text — дословный текст условия; для number только номер, для insurer только наименование.\n"
     "dates — даты в виде ГГГГ-ММ-ДД; amounts — суммы числом и код валюты ISO 4217; entries — "
     "перечисленные в условии позиции дословно.\n"
@@ -31,7 +34,8 @@ _KEYS = (
 _POLICY = _KEYS + "Документ — генеральный полис."
 _AMENDMENT = (
     _KEYS + "Документ — дополнительное соглашение к полису. Верни только те пункты полиса, которые "
-    "оно меняет или добавляет, с номером, под которым пункт назван в соглашении. Номер и дату "
+    "оно меняет или добавляет, с номером, под которым пункт назван в соглашении: point — номер "
+    "пункта полиса, а не пункта самого соглашения. Номер и дату "
     "полиса, номер, даты и стороны самого соглашения не возвращай. Если соглашение меняет только "
     "реквизиты, верни пустой список."
 )
@@ -217,6 +221,81 @@ class Checked:
 
 
 @final
+class Numbered:
+    """Findings of a policy whose points are looked for in its text; a number that the text does
+    not hold stays with its condition and goes to the expert."""
+
+    __slots__ = ("_evidence", "_findings", "_label")
+
+    def __init__(self, findings: Findings, evidence: Evidence, label: str) -> None:
+        self._findings: Final = findings
+        self._evidence: Final = evidence
+        self._label: Final = label
+
+    def passages(self) -> tuple[Passage, ...]:
+        return self._findings.passages()
+
+    def problems(self) -> tuple[str, ...]:
+        return (
+            *self._findings.problems(),
+            *(
+                f"{self._label}: номера пункта {passage.point} условия {passage.key} нет в тексте "
+                "документа, его проверяет эксперт"
+                for passage in self.passages()
+                if passage.key not in _REQUISITES
+                and passage.point
+                and not self._evidence.numbered(passage.point)
+            ),
+        )
+
+
+@final
+class Distinct:
+    """Findings where each point of a clause is worded once and a limit holds one sum per
+    currency; what breaks this stays as it is and goes to the expert, because code has no
+    grounds to choose, and an exact repeat counts once."""
+
+    __slots__ = ("_findings", "_label")
+
+    def __init__(self, findings: Findings, label: str) -> None:
+        self._findings: Final = findings
+        self._label: Final = label
+
+    def passages(self) -> tuple[Passage, ...]:
+        return tuple(dict.fromkeys(self._findings.passages()))
+
+    def problems(self) -> tuple[str, ...]:
+        clauses = tuple(passage for passage in self.passages() if passage.key not in _REQUISITES)
+        return (*self._findings.problems(), *self._repeats(clauses), *self._sums(clauses))
+
+    def _repeats(self, clauses: tuple[Passage, ...]) -> tuple[str, ...]:
+        seats = tuple((passage.key, passage.point) for passage in clauses)
+        return tuple(
+            f"{self._label}: модель вернула несколько редакций условия {key} пункта "
+            f"{point or 'без номера'}, выбор остаётся за экспертом"
+            for key, point in dict.fromkeys(seats)
+            if seats.count((key, point)) > 1
+        )
+
+    def _sums(self, clauses: tuple[Passage, ...]) -> tuple[str, ...]:
+        sums = tuple(
+            dict.fromkeys(
+                amount
+                for passage in clauses
+                if passage.key == "limit"
+                for amount in passage.amounts
+            )
+        )
+        currencies = tuple(amount.currency for amount in sums)
+        return tuple(
+            f"{self._label}: в условии limit несколько сумм {currency}, сумму на одну партию "
+            "выбирает эксперт"
+            for currency in dict.fromkeys(currencies)
+            if currencies.count(currency) > 1
+        )
+
+
+@final
 class Asked:
     """Request to the model about one paper; a failed answer becomes a problem of this document,
     so that the rest of the package is still read."""
@@ -287,8 +366,8 @@ class Preamble:
 
 @final
 class Stamp:
-    """Edition with the requisites that code knows: one wording per clause of a document, under
-    a source that tells it from the wordings of other documents."""
+    """Edition with the requisites that code knows: one wording per passage of a document, under
+    a source of its own that tells it from the wordings of other points and documents."""
 
     __slots__ = ("_amendment", "_effective", "_scope", "_source")
 
@@ -305,27 +384,24 @@ class Stamp:
         self._scope: Final = scope
 
     def wordings(self, passages: tuple[Passage, ...]) -> tuple[tuple[str, Wording], ...]:
-        clauses = tuple(passage for passage in passages if passage.key not in _REQUISITES)
         return tuple(
-            (key, self._wording(tuple(passage for passage in clauses if passage.key == key)))
-            for key in dict.fromkeys(passage.key for passage in clauses)
+            (passage.key, self._wording(passage))
+            for passage in passages
+            if passage.key not in _REQUISITES
         )
 
-    def _wording(self, group: tuple[Passage, ...]) -> Wording:
+    def _wording(self, passage: Passage) -> Wording:
         return Wording(
-            source=self._cited(group),
+            source=f"{self._source} п. {passage.point}" if passage.point else self._source,
+            point=passage.point,
             amendment=self._amendment,
             effective=self._effective,
             scope=self._scope,
-            text="\n".join(passage.text for passage in group if passage.text),
-            dates=tuple(dict.fromkeys(day for passage in group for day in passage.dates)),
-            amounts=tuple(dict.fromkeys(sum_ for passage in group for sum_ in passage.amounts)),
-            entries=tuple(dict.fromkeys(entry for passage in group for entry in passage.entries)),
+            text=passage.text,
+            dates=tuple(dict.fromkeys(passage.dates)),
+            amounts=tuple(dict.fromkeys(passage.amounts)),
+            entries=tuple(dict.fromkeys(passage.entries)),
         )
-
-    def _cited(self, group: tuple[Passage, ...]) -> str:
-        points = ", ".join(dict.fromkeys(passage.point for passage in group if passage.point))
-        return f"{self._source} п. {points}" if points else self._source
 
 
 @final
@@ -371,23 +447,37 @@ class Extraction:
 
     def _base(self) -> Findings:
         paper = self._package.policy()
-        return Checked(
-            Asked(self._model, paper, "profile.policy", _POLICY).findings(),
-            Original(paper.text()),
+        evidence = Original(paper.text())
+        return Distinct(
+            Numbered(
+                Checked(
+                    Asked(self._model, paper, "profile.policy", _POLICY).findings(),
+                    evidence,
+                    paper.reference(),
+                ),
+                evidence,
+                paper.reference(),
+            ),
             paper.reference(),
         )
 
     def _revised(self, amendment: Amendment) -> Findings:
         evidence = Original(amendment.text())
-        return Checked(
-            Cited(
-                Asked(
-                    self._model, amendment, f"profile.amendment.{amendment.number()}", _AMENDMENT
-                ).findings(),
+        return Distinct(
+            Checked(
+                Cited(
+                    Asked(
+                        self._model,
+                        amendment,
+                        f"profile.amendment.{amendment.number()}",
+                        _AMENDMENT,
+                    ).findings(),
+                    evidence,
+                    amendment.reference(),
+                ),
                 evidence,
                 amendment.reference(),
             ),
-            evidence,
             amendment.reference(),
         )
 

@@ -10,7 +10,7 @@ from app.domain.field import Blank
 from app.domain.money import Amount
 from app.domain.revision import Revision
 from app.policy.schema.profile import Sum, Wording
-from app.policy.wording import Edition, Quoted
+from app.policy.wording import Edition, Editions, Gathered, Quoted
 
 
 def test_amendment_governs_a_shipment_that_starts_on_the_day_it_takes_effect() -> None:
@@ -283,6 +283,179 @@ def test_quoted_clause_gives_the_entries() -> None:
         Quoted(_wording(entries=entries)).entries(),
         equal_to(entries),
         "Quoted clause does not give the entries of the wording",
+    )
+
+
+def test_edition_supersedes_an_older_one_of_its_own_point() -> None:
+    day = _day()
+    older = _wording(source="ГП п. 5.2", point="5.2", effective=day)
+    newer = _wording(source="ДС 1 п. 5.2", point="5.2", effective=day, amendment=1)
+    assert_that(
+        _edition(newer, older).supersedes(_edition(older, newer)),
+        equal_to(True),
+        "Edition does not supersede an older one of its own point",
+    )
+
+
+def test_edition_supersedes_an_older_one_of_a_nested_point() -> None:
+    day = _day()
+    nested = _wording(source="ДС 1 п. 5.2", point="5.2", effective=day, amendment=1)
+    whole = _wording(source="ДС 2 п. 5", point="5", effective=day, amendment=2)
+    assert_that(
+        _edition(whole, nested).supersedes(_edition(nested, whole)),
+        equal_to(True),
+        "Edition of point 5 does not supersede an older one of point 5.2",
+    )
+
+
+def test_edition_without_a_point_supersedes_an_older_one_of_any_point() -> None:
+    day = _day()
+    nested = _wording(source="ГП п. 5.2", point="5.2", effective=day)
+    whole = _wording(source="ДС 2", effective=day, amendment=2)
+    assert_that(
+        _edition(whole, nested).supersedes(_edition(nested, whole)),
+        equal_to(True),
+        "Edition of the whole clause does not supersede an older one of a point",
+    )
+
+
+def test_edition_of_a_nested_point_leaves_the_point_around_it() -> None:
+    day = _day()
+    whole = _wording(source="ГП п. 5", point="5", effective=day)
+    nested = _wording(source="ДС 1 п. 5.2", point="5.2", effective=day, amendment=1)
+    assert_that(
+        _edition(nested, whole).supersedes(_edition(whole, nested)),
+        equal_to(False),
+        "Edition of point 5.2 does not leave point 5 in place",
+    )
+
+
+def test_edition_of_a_point_leaves_a_neighbouring_point() -> None:
+    day = _day()
+    neighbour = _wording(source="ГП п. 5.3", point="5.3", effective=day)
+    edition = _wording(source="ДС 1 п. 5.2", point="5.2", effective=day, amendment=1)
+    assert_that(
+        _edition(edition, neighbour).supersedes(_edition(neighbour, edition)),
+        equal_to(False),
+        "Edition of point 5.2 does not leave point 5.3 in place",
+    )
+
+
+def test_edition_compares_points_by_parts_and_not_by_letters() -> None:
+    day = _day()
+    longer = _wording(source="ГП п. 5.10", point="5.10", effective=day)
+    edition = _wording(source="ДС 1 п. 5.1", point="5.1", effective=day, amendment=1)
+    assert_that(
+        _edition(edition, longer).supersedes(_edition(longer, edition)),
+        equal_to(False),
+        "Edition of point 5.1 does not leave point 5.10 in place",
+    )
+
+
+def test_policy_wording_of_a_point_leaves_the_policy_wording_nested_in_it() -> None:
+    day = _day()
+    whole = _wording(source="ГП п. 5", point="5", effective=day)
+    nested = _wording(source="ГП п. 5.2", point="5.2", effective=day)
+    assert_that(
+        _edition(whole, nested).supersedes(_edition(nested, whole)),
+        equal_to(False),
+        "Policy wording of point 5 does not leave its own point 5.2 in place",
+    )
+
+
+def test_edition_keeps_a_source_that_also_stands_for_another_point() -> None:
+    day = _day()
+    nested = _wording(source="ГП", point="5.2", effective=day)
+    other = _wording(source="ГП", point="6", effective=day)
+    edition = _wording(source="ДС 1 п. 5", point="5", effective=day, amendment=1)
+    assert_that(
+        _edition(edition, nested, other).supersedes(_edition(nested, edition, other)),
+        equal_to(False),
+        "Edition does not keep a source that also stands for another point",
+    )
+
+
+def test_edition_refuses_to_compare_a_point_that_is_no_number() -> None:
+    day = _day()
+    odd = _wording(source="ГП п. пять", point="пять", effective=day)
+    edition = _wording(source="ДС 1 п. 5", point="5", effective=day, amendment=1)
+    assert_that(
+        lambda: _edition(edition, odd).supersedes(_edition(odd, edition)),
+        raises(UnreadableError, "пять"),
+        "Edition does not refuse to compare a point that is no number",
+    )
+
+
+def test_editions_treat_a_trailing_dot_of_a_point_as_nothing() -> None:
+    day = _day()
+    dotted = _wording(source="ГП п. 5.2.", point="5.2.", effective=day)
+    edition = _wording(source="ДС 1 п. 5.2", point="5.2", effective=day, amendment=1)
+    assert_that(
+        Editions("object", (dotted, edition)).clause(_Trip("1", day)).reference(),
+        equal_to("ДС 1 п. 5.2"),
+        "Editions do not treat a trailing dot of a point as nothing",
+    )
+
+
+def test_gathered_clause_lists_the_sources_in_the_order_given() -> None:
+    assert_that(
+        Gathered(
+            (_wording(source="ГП п. 5.9", point="5.9"), _wording(source="ДС 1", point="5.10"))
+        ).reference(),
+        equal_to("ГП п. 5.9, ДС 1"),
+        "Gathered clause does not list the sources in the order given",
+    )
+
+
+def test_gathered_clause_names_a_shared_source_once() -> None:
+    assert_that(
+        Gathered((_wording(source="ГП", point="5"), _wording(source="ГП", point="6"))).reference(),
+        equal_to("ГП"),
+        "Gathered clause does not name a shared source once",
+    )
+
+
+def test_gathered_clause_joins_the_texts_by_lines_and_skips_the_empty_one() -> None:
+    first, second = uuid.uuid4().hex, uuid.uuid4().hex
+    assert_that(
+        Gathered((_wording(text=first), _wording(), _wording(text=second))).text(),
+        equal_to(f"{first}\n{second}"),
+        "Gathered clause does not join the texts by lines",
+    )
+
+
+def test_gathered_clause_gives_every_date_once() -> None:
+    first, second = date(2026, 1, 1), date(2026, 2, 2)
+    assert_that(
+        Gathered((_wording(dates=(first, second)), _wording(dates=(second,)))).dates(),
+        equal_to((first, second)),
+        "Gathered clause does not give every date once",
+    )
+
+
+def test_gathered_clause_gives_every_sum_once_as_money() -> None:
+    assert_that(
+        tuple(
+            amount.text()
+            for amount in Gathered(
+                (
+                    _wording(amounts=(Sum(value=Decimal("5"), currency="USD"),)),
+                    _wording(amounts=(Sum(value=Decimal("5.00"), currency="USD"),)),
+                    _wording(amounts=(Sum(value=Decimal("7"), currency="EUR"),)),
+                )
+            ).amounts()
+        ),
+        equal_to((Amount(Decimal("5"), "USD").text(), Amount(Decimal("7"), "EUR").text())),
+        "Gathered clause does not give every sum once as money",
+    )
+
+
+def test_gathered_clause_gives_every_entry_once() -> None:
+    first, second = uuid.uuid4().hex, uuid.uuid4().hex
+    assert_that(
+        Gathered((_wording(entries=(first, second)), _wording(entries=(second,)))).entries(),
+        equal_to((first, second)),
+        "Gathered clause does not give every entry once",
     )
 
 

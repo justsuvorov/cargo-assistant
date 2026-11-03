@@ -4,12 +4,24 @@ import uuid
 from datetime import date
 from decimal import Decimal
 
-from hamcrest import assert_that, empty, equal_to, has_item, has_length, is_not, raises
+from hamcrest import (
+    assert_that,
+    contains_string,
+    empty,
+    equal_to,
+    has_item,
+    has_length,
+    is_not,
+    raises,
+)
 
+from app.domain.errors import UnreadableError
+from app.domain.field import Blank
 from app.llm.errors import MisconfiguredError
 from app.llm.fake import FakeModel
 from app.llm.ledger import Memory, Route
 from app.llm.model import Strict
+from app.policy.approved import Approved
 from app.policy.extraction import Extraction
 from app.policy.package import Amendment, Paper
 from app.policy.schema.profile import Sum
@@ -80,6 +92,25 @@ class Bundle:
 
     def problems(self) -> tuple[str, ...]:
         return self._rest.get("problems", ())
+
+
+class Departure:
+    """Fictional shipment of a declaration that starts on a given day."""
+
+    def __init__(self, start: date) -> None:
+        self._start = start
+
+    def number(self) -> str:
+        return "1"
+
+    def declaration(self) -> str:
+        return "1"
+
+    def field(self, key: str) -> Blank:
+        return Blank(key)
+
+    def start(self) -> date:
+        return self._start
 
 
 def passage(key: str, point: str = "", text: str = "", **values: list[object]) -> dict[str, object]:
@@ -370,15 +401,308 @@ def test_policy_wording_without_a_point_refers_to_its_paper() -> None:
     )
 
 
-def test_joins_the_passages_of_one_clause_into_one_wording() -> None:
+def test_writes_a_wording_for_each_point_of_one_clause() -> None:
+    assert_that(
+        [
+            wording.source
+            for wording in Extraction(
+                Bundle(Sheet("12. Лимит\n12.5. Лимит")),
+                FakeModel(
+                    {
+                        "profile.policy": reading(
+                            passage("limit", "12", "Лимит"), passage("limit", "12.5", "Лимит")
+                        )
+                    }
+                ),
+            )
+            .profile()
+            .clauses["limit"]
+        ],
+        equal_to(["ГП п. 12", "ГП п. 12.5"]),
+        "Extraction does not write a wording for each point of one clause",
+    )
+
+
+def test_policy_wording_carries_its_point() -> None:
     assert_that(
         Extraction(
-            Bundle(Sheet("12. Лимит 100 000 рублей. 12.5. Лимит 200 000 рублей")),
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel({"profile.policy": reading(passage("limit", "12.5", "Лимит"))}),
+        )
+        .profile()
+        .clauses["limit"][0]
+        .point,
+        equal_to("12.5"),
+        "Policy wording does not carry its point",
+    )
+
+
+def test_amendment_wording_carries_its_point_and_its_own_source() -> None:
+    wording = (
+        Extraction(
+            Bundle(Sheet("Полис"), (Signed(27, "Пункт 12.7 принять", date(2026, 3, 1)),)),
+            FakeModel(
+                {
+                    "profile.policy": reading(),
+                    "profile.amendment.27": reading(passage("limit", "12.7", "Совокупно")),
+                }
+            ),
+        )
+        .profile()
+        .clauses["limit"][0]
+    )
+    assert_that(
+        (wording.point, wording.source),
+        equal_to(("12.7", "ДС 27 п. 12.7")),
+        "Amendment wording does not carry its point and its own source",
+    )
+
+
+def test_wording_of_a_point_keeps_only_its_own_text_and_sums() -> None:
+    wording = (
+        Extraction(
+            Bundle(Sheet("12. Лимит 100 000 рублей\n12.5. Лимит 200 000 рублей")),
             FakeModel(
                 {
                     "profile.policy": reading(
-                        passage("limit", "12", amounts=[{"value": "100000", "currency": "RUB"}]),
-                        passage("limit", "12.5", amounts=[{"value": "200000", "currency": "RUB"}]),
+                        passage(
+                            "limit",
+                            "12",
+                            "первый",
+                            amounts=[{"value": "100000", "currency": "RUB"}],
+                        ),
+                        passage(
+                            "limit",
+                            "12.5",
+                            "второй",
+                            amounts=[{"value": "200000", "currency": "RUB"}],
+                        ),
+                    )
+                }
+            ),
+        )
+        .profile()
+        .clauses["limit"][1]
+    )
+    assert_that(
+        (wording.text, wording.amounts),
+        equal_to(("второй", (Sum(value=Decimal(200000), currency="RUB"),))),
+        "Wording of a point does not keep only its own text and sums",
+    )
+
+
+def test_wording_of_a_point_gives_every_date_once() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("6. С 01.01.2026 по 01.01.2026")),
+            FakeModel(
+                {
+                    "profile.policy": reading(
+                        passage("term", "6", dates=["2026-01-01", "2026-01-01"])
+                    )
+                }
+            ),
+        )
+        .profile()
+        .clauses["term"][0]
+        .dates,
+        equal_to((date(2026, 1, 1),)),
+        "Wording of a point does not give every date once",
+    )
+
+
+def test_records_a_policy_point_that_its_text_does_not_hold() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel({"profile.policy": reading(passage("limit", "12.7", "Совокупно"))}),
+        )
+        .profile()
+        .problems,
+        has_item(
+            "Файл ГП: номера пункта 12.7 условия limit нет в тексте документа, "
+            "его проверяет эксперт"
+        ),
+        "Policy point that its text does not hold is not recorded in problems",
+    )
+
+
+def test_keeps_the_wording_of_a_policy_point_that_its_text_does_not_hold() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel({"profile.policy": reading(passage("limit", "12.7", "Совокупно"))}),
+        )
+        .profile()
+        .clauses["limit"],
+        has_length(1),
+        "Wording of a policy point that its text does not hold is not kept",
+    )
+
+
+def test_does_not_record_a_policy_point_that_its_text_holds() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("12.5. Лимит")),
+                FakeModel({"profile.policy": reading(passage("limit", "12.5", "Лимит"))}),
+            )
+            .profile()
+            .problems
+            if "12.5" in problem
+        ),
+        empty(),
+        "Extraction does not accept a policy point that its text holds",
+    )
+
+
+def test_does_not_record_a_policy_wording_without_a_point() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("Лимит")),
+                FakeModel({"profile.policy": reading(passage("limit", text="Лимит"))}),
+            )
+            .profile()
+            .problems
+            if "limit" in problem
+        ),
+        empty(),
+        "Extraction does not accept a policy wording without a point",
+    )
+
+
+def test_does_not_look_for_the_point_of_a_requisite() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("Полис № 77")),
+                FakeModel({"profile.policy": reading(passage("number", "99", "77"))}),
+            )
+            .profile()
+            .problems
+            if "99" in problem
+        ),
+        empty(),
+        "Extraction does not ignore the point of a requisite",
+    )
+
+
+def test_records_two_policy_wordings_of_one_point() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel(
+                {
+                    "profile.policy": reading(
+                        passage("limit", "12.5", "первый"), passage("limit", "12.5", "второй")
+                    )
+                }
+            ),
+        )
+        .profile()
+        .problems,
+        has_item(
+            "Файл ГП: модель вернула несколько редакций условия limit пункта 12.5, "
+            "выбор остаётся за экспертом"
+        ),
+        "Two policy wordings of one point are not recorded in problems",
+    )
+
+
+def test_keeps_both_policy_wordings_of_one_point_for_the_expert() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel(
+                {
+                    "profile.policy": reading(
+                        passage("limit", "12.5", "первый"), passage("limit", "12.5", "второй")
+                    )
+                }
+            ),
+        )
+        .profile()
+        .clauses["limit"],
+        has_length(2),
+        "Two policy wordings of one point are not both kept for the expert",
+    )
+
+
+def test_two_policy_wordings_of_one_point_stop_the_choice_of_the_approved_clause() -> None:
+    profile = Extraction(
+        Bundle(Sheet("12.5. Лимит")),
+        FakeModel(
+            {
+                "profile.policy": reading(
+                    passage("limit", "12.5", "первый"), passage("limit", "12.5", "второй")
+                )
+            }
+        ),
+    ).profile()
+    assert_that(
+        lambda: Approved(profile).clause("limit", Departure(date(2026, 4, 1))),
+        raises(UnreadableError, "ГП п. 12.5"),
+        "Two policy wordings of one point do not stop the choice of the approved clause",
+    )
+
+
+def test_records_two_policy_wordings_without_a_point() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("Текст")),
+            FakeModel(
+                {
+                    "profile.policy": reading(
+                        passage("object", text="первый"), passage("object", text="второй")
+                    )
+                }
+            ),
+        )
+        .profile()
+        .problems,
+        has_item(
+            "Файл ГП: модель вернула несколько редакций условия object пункта без номера, "
+            "выбор остаётся за экспертом"
+        ),
+        "Two policy wordings without a point are not recorded in problems",
+    )
+
+
+def test_records_two_wordings_of_one_point_in_an_amendment() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("Полис"), (Signed(4, "Пункт 8 принять", date(2026, 3, 1)),)),
+            FakeModel(
+                {
+                    "profile.policy": reading(),
+                    "profile.amendment.4": reading(
+                        passage("transport", "8", "первый"), passage("transport", "8", "второй")
+                    ),
+                }
+            ),
+        )
+        .profile()
+        .problems,
+        has_item(
+            "Файл ДС 4: модель вернула несколько редакций условия transport пункта 8, "
+            "выбор остаётся за экспертом"
+        ),
+        "Two wordings of one point in an amendment are not recorded in problems",
+    )
+
+
+def test_repeated_passage_counts_once() -> None:
+    assert_that(
+        Extraction(
+            Bundle(Sheet("12.5. Лимит")),
+            FakeModel(
+                {
+                    "profile.policy": reading(
+                        passage("limit", "12.5", "Лимит"), passage("limit", "12.5", "Лимит")
                     )
                 }
             ),
@@ -386,48 +710,219 @@ def test_joins_the_passages_of_one_clause_into_one_wording() -> None:
         .profile()
         .clauses["limit"],
         has_length(1),
-        "Passages of one clause are not joined into one wording",
+        "Repeated passage does not count once",
     )
 
 
-def test_joined_wording_refers_to_every_point() -> None:
+def test_does_not_record_a_repeated_passage() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("12.5. Лимит")),
+                FakeModel(
+                    {
+                        "profile.policy": reading(
+                            passage("limit", "12.5", "Лимит"), passage("limit", "12.5", "Лимит")
+                        )
+                    }
+                ),
+            )
+            .profile()
+            .problems
+            if "limit" in problem
+        ),
+        empty(),
+        "Extraction does not accept a repeated passage",
+    )
+
+
+def test_same_point_of_two_clauses_is_no_repeat() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("5. Грузы")),
+                FakeModel(
+                    {
+                        "profile.policy": reading(
+                            passage("object", "5", "Грузы"),
+                            passage("exclusions_cargo", "5", "Кроме"),
+                        )
+                    }
+                ),
+            )
+            .profile()
+            .problems
+            if "object" in problem or "exclusions_cargo" in problem
+        ),
+        empty(),
+        "Extraction does not tell the same point of two clauses from a repeat",
+    )
+
+
+def test_records_several_sums_of_one_currency_in_a_point_of_the_limit() -> None:
     assert_that(
         Extraction(
-            Bundle(Sheet("12. Лимит. 12.5. Лимит")),
+            Bundle(Sheet("12.5. Лимит 100 рублей или 200 рублей")),
             FakeModel(
                 {
                     "profile.policy": reading(
-                        passage("limit", "12", "Лимит"), passage("limit", "12.5", "Лимит")
+                        passage(
+                            "limit",
+                            "12.5",
+                            amounts=[
+                                {"value": "100", "currency": "RUB"},
+                                {"value": "200", "currency": "RUB"},
+                            ],
+                        )
                     )
                 }
             ),
         )
         .profile()
-        .clauses["limit"][0]
-        .source,
-        equal_to("ГП п. 12, 12.5"),
-        "Joined wording does not refer to every point",
+        .problems,
+        has_item(
+            "Файл ГП: в условии limit несколько сумм RUB, сумму на одну партию выбирает эксперт"
+        ),
+        "Several sums of one currency in a point of the limit are not recorded in problems",
     )
 
 
-def test_joined_wording_keeps_every_amount() -> None:
+def test_records_sums_of_one_currency_in_two_points_of_the_limit() -> None:
     assert_that(
         Extraction(
-            Bundle(Sheet("12. Лимит 100 000 рублей. 12.5. Лимит 200 000 рублей")),
+            Bundle(Sheet("12.5. Лимит 100 рублей\n12.7. Всего 900 рублей")),
             FakeModel(
                 {
                     "profile.policy": reading(
-                        passage("limit", "12", amounts=[{"value": "100000", "currency": "RUB"}]),
-                        passage("limit", "12.5", amounts=[{"value": "200000", "currency": "RUB"}]),
+                        passage("limit", "12.5", amounts=[{"value": "100", "currency": "RUB"}]),
+                        passage("limit", "12.7", amounts=[{"value": "900", "currency": "RUB"}]),
                     )
                 }
             ),
         )
         .profile()
-        .clauses["limit"][0]
-        .amounts,
-        has_length(2),
-        "Joined wording does not keep every amount",
+        .problems,
+        has_item(
+            "Файл ГП: в условии limit несколько сумм RUB, сумму на одну партию выбирает эксперт"
+        ),
+        "Sums of one currency in two points of the limit are not recorded in problems",
+    )
+
+
+def test_does_not_record_one_sum_of_the_limit_in_each_currency() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("12.5. Лимит 100 рублей или 200 USD")),
+                FakeModel(
+                    {
+                        "profile.policy": reading(
+                            passage(
+                                "limit",
+                                "12.5",
+                                amounts=[
+                                    {"value": "100", "currency": "RUB"},
+                                    {"value": "200", "currency": "USD"},
+                                ],
+                            )
+                        )
+                    }
+                ),
+            )
+            .profile()
+            .problems
+            if "limit" in problem
+        ),
+        empty(),
+        "Extraction does not accept one sum of the limit in each currency",
+    )
+
+
+def test_does_not_record_several_sums_of_one_currency_in_another_clause() -> None:
+    assert_that(
+        tuple(
+            problem
+            for problem in Extraction(
+                Bundle(Sheet("5. Грузы от 100 рублей до 200 рублей")),
+                FakeModel(
+                    {
+                        "profile.policy": reading(
+                            passage(
+                                "object",
+                                "5",
+                                amounts=[
+                                    {"value": "100", "currency": "RUB"},
+                                    {"value": "200", "currency": "RUB"},
+                                ],
+                            )
+                        )
+                    }
+                ),
+            )
+            .profile()
+            .problems
+            if "object" in problem
+        ),
+        empty(),
+        "Extraction does not accept several sums of one currency in another clause",
+    )
+
+
+def test_amendment_of_a_new_point_leaves_the_limit_of_the_policy_in_the_approved_clause() -> None:
+    profile = Extraction(
+        Bundle(
+            Sheet("12.5. Лимит 100 рублей"),
+            (Signed(27, "Пункт 12.7 добавить", date(2026, 3, 1)),),
+        ),
+        FakeModel(
+            {
+                "profile.policy": reading(
+                    passage("limit", "12.5", amounts=[{"value": "100", "currency": "RUB"}])
+                ),
+                "profile.amendment.27": reading(passage("limit", "12.7", "Совокупно")),
+            }
+        ),
+    ).profile()
+    assert_that(
+        Approved(profile).clause("limit", Departure(date(2026, 4, 1))).reference(),
+        equal_to("ГП п. 12.5, ДС 27 п. 12.7"),
+        "Amendment of a new point does not leave the limit of the policy in the approved clause",
+    )
+
+
+def test_tells_the_model_to_keep_aggregate_limits_out_of_the_limit() -> None:
+    backend = Scripted([reading()])
+    Extraction(Bundle(Sheet("Полис")), Strict(backend, Route("vsk", "m"), Memory(), 5.0)).profile()
+    assert_that(
+        backend.conversations[0][0].text(),
+        contains_string("совокупн"),
+        "Model is not told to keep aggregate limits out of the limit",
+    )
+
+
+def test_tells_the_model_to_give_each_point_its_own_passage() -> None:
+    backend = Scripted([reading()])
+    Extraction(Bundle(Sheet("Полис")), Strict(backend, Route("vsk", "m"), Memory(), 5.0)).profile()
+    assert_that(
+        backend.conversations[0][0].text(),
+        contains_string("отдельный объект"),
+        "Model is not told to give each point its own passage",
+    )
+
+
+def test_tells_the_model_to_number_a_passage_of_an_amendment_by_the_policy() -> None:
+    backend = Scripted([reading()])
+    Extraction(
+        Bundle(Sheet("Полис"), (Signed(1, "Пункт 8", date(2026, 3, 1)),)),
+        Strict(backend, Route("vsk", "m"), Memory(), 5.0),
+    ).profile()
+    assert_that(
+        backend.conversations[1][0].text(),
+        contains_string("номер пункта полиса"),
+        "Model is not told to number a passage of an amendment by the policy",
     )
 
 

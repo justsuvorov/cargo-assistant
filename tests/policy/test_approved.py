@@ -5,11 +5,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from hamcrest import assert_that, contains_string, equal_to, raises
+from hamcrest import assert_that, contains_string, equal_to, has_length, raises
 
 from app.domain.clause import Absent
 from app.domain.errors import UnreadableError
 from app.domain.field import Blank
+from app.domain.money import Amount
 from app.domain.policy import Policy
 from app.domain.verdict import Verdict
 from app.policy.approved import Approved
@@ -526,6 +527,383 @@ def test_every_real_card_answers_about_a_shipment_without_a_start() -> None:
     )
 
 
+def test_amendment_of_a_new_point_leaves_the_limit_of_another_point() -> None:
+    day = _day()
+    assert_that(
+        tuple(
+            amount.text()
+            for amount in Approved(_points(day))
+            .clause("limit", _Trip("1", day + timedelta(days=1)))
+            .amounts()
+        ),
+        equal_to((Amount(Decimal(1000000), "RUB").text(),)),
+        "Amendment of point 12.7 does not leave the limit of point 12.5",
+    )
+
+
+def test_clause_refers_to_every_point_in_force() -> None:
+    day = _day()
+    assert_that(
+        Approved(_points(day)).clause("limit", _Trip("1", day + timedelta(days=1))).reference(),
+        equal_to("ГП п. 12.5, ДС 27 п. 12.7"),
+        "Clause does not refer to every point in force",
+    )
+
+
+def test_clause_gives_the_text_of_every_point_in_force_in_the_order_of_points() -> None:
+    day = _day()
+    late = _wording("ГП п. 5.10", day, point="5.10", text="десятый")
+    early = _wording("ГП п. 5.9", day, point="5.9", text="девятый")
+    assert_that(
+        Approved(_profile({"object": (late, early)})).clause("object", _Trip("1", day)).text(),
+        equal_to("девятый\nдесятый"),
+        "Clause does not give the text of every point in the order of points",
+    )
+
+
+def test_clause_gives_the_entries_of_every_point_in_force_in_the_order_of_points() -> None:
+    day = _day()
+    late = _wording("ГП п. 12", day, point="12", entries=("второй",))
+    early = _wording("ГП п. 9", day, point="9", entries=("первый",))
+    assert_that(
+        Approved(_profile({"object": (late, early)})).clause("object", _Trip("1", day)).entries(),
+        equal_to(("первый", "второй")),
+        "Clause does not give the entries of every point in the order of points",
+    )
+
+
+def test_clause_gives_the_dates_of_every_point_in_force_in_the_order_of_points() -> None:
+    day = _day()
+    start, end = date(2026, 1, 1), date(2026, 12, 31)
+    late = _wording("ГП п. 6.2", day, point="6.2", dates=(end,))
+    early = _wording("ГП п. 6.1", day, point="6.1", dates=(start,))
+    assert_that(
+        Approved(_profile({"term": (late, early)})).clause("term", _Trip("1", day)).dates(),
+        equal_to((start, end)),
+        "Clause does not give the dates of every point in the order of points",
+    )
+
+
+def test_amendment_of_a_point_replaces_only_this_point() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ГП п. 5.1", day, point="5.1"),
+                _wording("ГП п. 5.2", day, point="5.2"),
+                _wording("ДС 3 п. 5.2", day, point="5.2", amendment=3),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("1", day)).reference(),
+        equal_to("ГП п. 5.1, ДС 3 п. 5.2"),
+        "Amendment of a point does not replace only this point",
+    )
+
+
+def test_amendment_of_the_whole_point_after_one_of_a_nested_point_replaces_both() -> None:
+    day = _day()
+    assert_that(
+        Approved(_nested(day)).clause("object", _Trip("1", day + timedelta(days=9))).reference(),
+        equal_to("ДС 8 п. 5"),
+        "Amendment of point 5 after one of point 5.2 does not replace both",
+    )
+
+
+def test_amendment_of_the_whole_point_waits_for_its_date_behind_the_nested_one() -> None:
+    day = _day()
+    assert_that(
+        Approved(_nested(day)).clause("object", _Trip("1", day + timedelta(days=4))).reference(),
+        equal_to("ГП п. 5, ДС 7 п. 5.2"),
+        "Amendment of point 5 does not wait for its date behind the one of point 5.2",
+    )
+
+
+def test_amendment_of_a_nested_point_after_one_of_the_whole_point_stands_beside_it() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ДС 8 п. 5.2", day, point="5.2", amendment=8),
+                _wording("ДС 7 п. 5", day - timedelta(days=1), point="5", amendment=7),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("1", day)).reference(),
+        equal_to("ДС 7 п. 5, ДС 8 п. 5.2"),
+        "Amendment of point 5.2 after one of point 5 does not stand beside it",
+    )
+
+
+def test_amendment_without_a_point_replaces_every_point() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ГП п. 5.1", day, point="5.1"),
+                _wording("ДС 3 п. 5.2", day, point="5.2", amendment=3),
+                _wording("ДС 4", day, amendment=4),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("1", day)).reference(),
+        equal_to("ДС 4"),
+        "Amendment without a point does not replace every point",
+    )
+
+
+def test_amendment_to_another_declaration_leaves_the_point_of_the_policy() -> None:
+    day = _day()
+    number = random.randint(100, 499)
+    assert_that(
+        Approved(_foreign(day, number))
+        .clause("limit", _Trip(str(number + 500), day + timedelta(days=1)))
+        .reference(),
+        equal_to("ГП п. 12.5"),
+        "Amendment to another declaration does not leave the point of the policy",
+    )
+
+
+def test_amendment_to_the_declaration_replaces_the_point_of_the_policy() -> None:
+    day = _day()
+    number = random.randint(100, 499)
+    assert_that(
+        Approved(_foreign(day, number))
+        .clause("limit", _Trip(str(number), day + timedelta(days=1)))
+        .reference(),
+        equal_to("ДС 5 п. 12.5"),
+        "Amendment to the declaration does not replace the point of the policy",
+    )
+
+
+def test_amendment_of_a_point_to_the_declaration_stays_under_a_later_general_one() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ДС 1 п. 5.2", day, point="5.2", amendment=1, scope=("77",)),
+                _wording("ДС 2 п. 5", day + timedelta(days=1), point="5", amendment=2),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("77", day + timedelta(days=2))).reference(),
+        equal_to("ДС 2 п. 5, ДС 1 п. 5.2"),
+        "Amendment of a point to the declaration does not stay under a later general one",
+    )
+
+
+def test_policy_wordings_of_different_points_are_not_rivals() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ГП п. 5", day, point="5"),
+                _wording("ГП п. 5.2", day, point="5.2"),
+                _wording("ГП п. 6", day, point="6"),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("1", day)).reference(),
+        equal_to("ГП п. 5, ГП п. 5.2, ГП п. 6"),
+        "Policy wordings of different points do not stand side by side",
+    )
+
+
+def test_policy_wordings_of_one_point_cannot_be_chosen_between() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ГП п. 5.2", day, point="5.2"),
+                _wording("ГП п. 5.2", day, point="5.2"),
+            )
+        }
+    )
+    assert_that(
+        lambda: Approved(profile).clause("object", _Trip("1", day)),
+        raises(UnreadableError, "ГП п. 5.2"),
+        "Policy wordings of one point do not stop the choice",
+    )
+
+
+def test_rivals_on_a_point_do_not_matter_once_an_amendment_replaces_it() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "object": (
+                _wording("ГП п. 5.2", day, point="5.2"),
+                _wording("ГП п. 5.2", day, point="5.2"),
+                _wording("ДС 1 п. 5.2", day, point="5.2", amendment=1),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("object", _Trip("1", day)).reference(),
+        equal_to("ДС 1 п. 5.2"),
+        "Rivals on a point do not give way to an amendment that replaced them",
+    )
+
+
+def test_point_that_is_no_number_stops_the_choice() -> None:
+    day = _day()
+    profile = _profile({"object": (_wording("ГП п. пять", day, point="пять"),)})
+    assert_that(
+        lambda: Approved(profile).clause("object", _Trip("1", day)),
+        raises(UnreadableError, "пять"),
+        "Point that is no number does not stop the choice",
+    )
+
+
+def test_amended_point_cannot_be_chosen_for_a_shipment_without_a_start() -> None:
+    day = _day()
+    assert_that(
+        lambda: Approved(_points(day)).clause("limit", _Undated()),
+        raises(UnreadableError),
+        "Amended point does not refuse a shipment without a start",
+    )
+
+
+def test_limit_with_two_sums_of_one_currency_in_one_point_cannot_be_read() -> None:
+    day = _day()
+    wording = _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(1), _rubles(2)))
+    assert_that(
+        lambda: Approved(_profile({"limit": (wording,)})).clause("limit", _Trip("1", day)),
+        raises(UnreadableError, "ГП п. 12.5"),
+        "Limit with two sums of one currency in one point does not stop the check",
+    )
+
+
+def test_limit_with_sums_of_one_currency_in_two_points_cannot_be_read() -> None:
+    day = _day()
+    assert_that(
+        lambda: Approved(_aggregate(day)).clause("limit", _Trip("1", day)),
+        raises(UnreadableError, "ГП п. 12.5, ДС 27 п. 12.7"),
+        "Limit with sums of one currency in two points does not stop the check",
+    )
+
+
+def test_limit_may_state_the_same_sum_in_two_points() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "limit": (
+                _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(7),)),
+                _wording("ГП п. 12.6", day, point="12.6", amounts=(_rubles(7),)),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("limit", _Trip("1", day)).amounts(),
+        has_length(1),
+        "Limit does not accept the same sum stated in two points",
+    )
+
+
+def test_limit_may_state_one_sum_in_each_currency() -> None:
+    day = _day()
+    dollars = Sum(value=Decimal(5), currency="USD")
+    wording = _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(7), dollars))
+    assert_that(
+        Approved(_profile({"limit": (wording,)})).clause("limit", _Trip("1", day)).amounts(),
+        has_length(2),
+        "Limit does not accept one sum in each currency",
+    )
+
+
+def test_replaced_sum_does_not_count_against_the_limit() -> None:
+    day = _day()
+    profile = _profile(
+        {
+            "limit": (
+                _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(7),)),
+                _wording("ДС 1 п. 12.5", day, point="12.5", amendment=1, amounts=(_rubles(9),)),
+            )
+        }
+    )
+    assert_that(
+        Approved(profile).clause("limit", _Trip("1", day)).amounts(),
+        has_length(1),
+        "Replaced sum does not leave the limit",
+    )
+
+
+def test_clause_of_another_key_may_state_several_sums_of_one_currency() -> None:
+    day = _day()
+    wording = _wording("ГП п. 5", day, point="5", amounts=(_rubles(1), _rubles(2)))
+    assert_that(
+        Approved(_profile({"object": (wording,)})).clause("object", _Trip("1", day)).amounts(),
+        has_length(2),
+        "Clause of another key does not accept several sums of one currency",
+    )
+
+
+def test_term_with_more_than_a_start_and_an_end_cannot_be_read() -> None:
+    assert_that(
+        lambda: Approved(_prolonged()).clause("term", _Trip("1", date(2026, 6, 1))),
+        raises(UnreadableError, "ГП п. 6, ДС 3 п. 6.2"),
+        "Term with more than a start and an end does not stop the check",
+    )
+
+
+def test_real_cards_check_a_sum_against_the_limit_beside_a_new_point() -> None:
+    row = {**_row(), "sum": ("500 000", "RUB")}
+    assert_that(
+        _statuses("sum", _paper("1", row), Approved(_points(date(2026, 6, 1)))),
+        equal_to(("match",)),
+        "Real cards do not check a sum against the limit beside a new point",
+    )
+
+
+def test_real_cards_reject_a_sum_over_the_limit_beside_a_new_point() -> None:
+    row = {**_row(), "sum": ("5 000 000", "RUB")}
+    assert_that(
+        _statuses("sum", _paper("1", row), Approved(_points(date(2026, 6, 1)))),
+        equal_to(("mismatch",)),
+        "Real cards do not reject a sum over the limit beside a new point",
+    )
+
+
+def test_real_cards_keep_the_policy_limit_beside_an_amendment_to_another_declaration() -> None:
+    row = {**_row(), "sum": ("5 000 000", "RUB")}
+    assert_that(
+        _statuses("sum", _paper("1", row), Approved(_foreign(date(2026, 6, 1), 700))),
+        equal_to(("mismatch",)),
+        "Real cards do not keep the policy limit beside an amendment to another declaration",
+    )
+
+
+def test_real_cards_apply_the_limit_of_an_amendment_to_the_point_for_its_declaration() -> None:
+    row = {**_row(), "sum": ("5 000 000", "RUB")}
+    assert_that(
+        _statuses("sum", _paper("700", row), Approved(_foreign(date(2026, 6, 1), 700))),
+        equal_to(("match",)),
+        "Real cards do not apply the limit of an amendment to the point for its declaration",
+    )
+
+
+def test_real_cards_ask_a_person_when_the_limit_holds_an_aggregate_sum() -> None:
+    verdict = _verdicts("sum", _paper("1", _row()), Approved(_aggregate(date(2026, 6, 1))))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person when the limit holds an aggregate sum",
+    )
+
+
+def test_real_cards_ask_a_person_when_the_term_is_split_between_points() -> None:
+    verdict = _verdicts("period_end", _paper("1", _row()), Approved(_prolonged()))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person when the term is split between points",
+    )
+
+
 def _day() -> date:
     return date(2026, random.randint(1, 12), random.randint(1, 28))
 
@@ -590,6 +968,70 @@ def _cover() -> Profile:
                     amounts=(_rubles(9000000),),
                 ),
             ),
+        }
+    )
+
+
+def _points(day: date) -> Profile:
+    return _profile(
+        {
+            "limit": (
+                _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(1000000),)),
+                _wording("ДС 27 п. 12.7", day, point="12.7", amendment=27),
+            )
+        }
+    )
+
+
+def _aggregate(day: date) -> Profile:
+    return _profile(
+        {
+            "limit": (
+                _wording("ДС 27 п. 12.7", day, point="12.7", amendment=27, amounts=(_rubles(9),)),
+                _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(1000000),)),
+            )
+        }
+    )
+
+
+def _foreign(day: date, number: int) -> Profile:
+    return _profile(
+        {
+            "limit": (
+                _wording("ГП п. 12.5", day, point="12.5", amounts=(_rubles(1000000),)),
+                _wording(
+                    "ДС 5 п. 12.5",
+                    day,
+                    point="12.5",
+                    amendment=5,
+                    scope=(str(number),),
+                    amounts=(_rubles(9000000),),
+                ),
+            )
+        }
+    )
+
+
+def _nested(day: date) -> Profile:
+    return _profile(
+        {
+            "object": (
+                _wording("ГП п. 5", day - timedelta(days=30), point="5"),
+                _wording("ДС 7 п. 5.2", day, point="5.2", amendment=7),
+                _wording("ДС 8 п. 5", day + timedelta(days=5), point="5", amendment=8),
+            )
+        }
+    )
+
+
+def _prolonged() -> Profile:
+    start, end = date(2026, 1, 15), date(2026, 12, 31)
+    return _profile(
+        {
+            "term": (
+                _wording("ГП п. 6", start, point="6", dates=(start, end)),
+                _wording("ДС 3 п. 6.2", start, point="6.2", amendment=3, dates=(date(2028, 1, 1),)),
+            )
         }
     )
 
