@@ -83,7 +83,8 @@ files = ["app", "tools", "tests", "migrations"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-p no:logging -p no:cacheprovider --strict-markers"
+addopts = "-p no:logging -p no:cacheprovider --strict-markers -m 'not soffice'"
+markers = ["soffice: starts the real LibreOffice; run on demand with -m soffice"]
 timeout = 10
 xfail_strict = true
 

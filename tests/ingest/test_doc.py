@@ -141,6 +141,7 @@ def make_docs(folder: Path, *names: str) -> list[Path]:
     return [folder / f"{name}.doc" for name in names]
 
 
+@pytest.mark.soffice
 @pytest.mark.timeout(300)
 @pytest.mark.skipif(shutil.which("soffice") is None, reason="LibreOffice is not installed")
 def test_converts_two_documents_in_parallel_on_own_profiles(tmp_path: Path) -> None:

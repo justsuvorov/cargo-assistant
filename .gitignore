@@ -7,7 +7,7 @@ __pycache__/
 *.egg-info/
 .env
 data/real/
-storage/
+/storage/
 *.sqlite3
 /.claude/
 deploy/k8s/secret.yaml

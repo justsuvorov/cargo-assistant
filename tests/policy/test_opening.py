@@ -65,7 +65,7 @@ def test_names_empty_document_in_problems(tmp_path: Path) -> None:
 
 
 def test_names_legacy_doc_that_the_converter_fails_to_convert(tmp_path: Path) -> None:
-    (tmp_path / "a.doc").write_bytes(b"x")
+    (tmp_path / "a.doc").write_bytes(bytes.fromhex("D0CF11E0A1B11AE1"))
     with _programs(tmp_path / "bin", "exit 1"):
         outcome = Opening(tmp_path / "a.doc", tmp_path).survey()
     assert_that(
