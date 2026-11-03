@@ -1,0 +1,100 @@
+{% set labels = {
+  "insurer": "Страхователь", "number": "Номер полиса", "term": "Срок действия",
+  "term_extension": "Продление действия на начатые партии", "limit": "Лимит на одну перевозку",
+  "object": "Объект страхования", "exclusions_cargo": "Исключённые грузы",
+  "transport": "Виды транспорта", "territory": "Территория и маршруты",
+  "exclusions_territory": "Исключённые территории", "beneficiary": "Выгодоприобретатель",
+  "carrier_risk": "Риск перевозчика", "carriers": "Перечень перевозчиков"
+} %}
+{% set states = {"draft": "черновик", "approved": "подтверждён", "replaced": "заменён"} %}
+<div id="policy-body"
+  {% if job and not job.finished() %}hx-get="/policies/{{ policy.id }}/body" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+<h1>Полис {{ policy.number or "(номер не определён)" }}</h1>
+{% if notice %}<div class="alert error" role="alert">{{ notice }}</div>{% endif %}
+{% if job %}
+  <p>Сборка профиля:
+    {% with job = job %}{% include "job.html" %}{% endwith %}
+  </p>
+  {% if job.status == "failed" %}
+  <div class="alert error" role="alert">
+    <strong>Сборка профиля не удалась.</strong> {{ job.error }}
+  </div>
+  {% endif %}
+  {% if expert and job.finished() %}
+  <form method="post" action="/policies/{{ policy.id }}/rebuild">
+    <button type="submit">Собрать профиль заново</button>
+  </form>
+  {% endif %}
+{% endif %}
+{% if version %}
+  {% set profile = version.profile %}
+  {% set readonly = "" if expert else "readonly" %}
+  <p>Версия профиля {{ version.number }}, {{ states[version.status] or version.status }}
+    {% if version.status == "approved" %}: подтвердил {{ version.approved_by }}, {{ version.approved_at }}{% endif %}</p>
+  {% if profile.problems %}
+  <div class="alert problems" role="alert">
+    <strong>Требует внимания эксперта ({{ profile.problems|length }})</strong>
+    <ul>{% for problem in profile.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+  {% if gaps %}
+  <div class="alert error" role="alert">
+    Подтвердить профиль нельзя, пока не заполнено: {{ gaps|join(", ") }}.
+  </div>
+  {% endif %}
+  <form method="post" action="/policies/{{ policy.id }}/profile">
+    <h2>Реквизиты</h2>
+    <table>
+      <tr><th>Номер полиса</th>
+        <td><input name="number" value="{{ profile.number }}" placeholder="не определён" {{ readonly }}>
+          {% if not profile.number.strip() %}<span class="undefined">не определён</span>{% endif %}</td></tr>
+      <tr><th>Дата выдачи</th>
+        <td><input type="date" name="issued" value="{{ '' if profile.issued.isoformat() == undefined else profile.issued.isoformat() }}" {{ readonly }}>
+          {% if profile.issued.isoformat() == undefined %}<span class="undefined">не определена</span>{% endif %}</td></tr>
+      <tr><th>Страхователь</th>
+        <td><input name="insurer" value="{{ profile.insurer }}" size="60" placeholder="не определён" {{ readonly }}>
+          {% if not profile.insurer.strip() %}<span class="undefined">не определён</span>{% endif %}</td></tr>
+    </table>
+    <h2>Пункты полиса и их редакции</h2>
+    {% for key, wordings in profile.clauses.items() %}
+    <h3>{{ labels[key] or key }}</h3>
+    <table>
+      <thead><tr><th>Источник</th><th>Подпункт</th><th>ДС</th><th>Действует с</th><th>Текст</th><th>Данные</th></tr></thead>
+      <tbody>
+      {% for wording in wordings %}
+      {% set index = loop.index0 %}
+      <tr>
+        <td>{{ wording.source }}</td>
+        <td><input name="point|{{ key }}|{{ index }}" value="{{ wording.point }}" size="8" {{ readonly }}>
+          {% if wording.point %}<small>подпункт {{ wording.point }}</small>{% endif %}</td>
+        <td>{{ wording.amendment or "ГП" }}</td>
+        <td><input type="date" name="effective|{{ key }}|{{ index }}" value="{{ wording.effective.isoformat() }}" {{ readonly }}></td>
+        <td><textarea name="text|{{ key }}|{{ index }}" rows="3" cols="50" {{ readonly }}>{{ wording.text }}</textarea></td>
+        <td>
+          {% if wording.dates %}даты: {{ wording.dates|map("string")|join(", ") }}<br>{% endif %}
+          {% for amount in wording.amounts %}сумма: {{ amount.value }} {{ amount.currency }}<br>{% endfor %}
+          {% if wording.entries %}позиции: {{ wording.entries|join("; ") }}{% endif %}
+          {% if wording.scope != "all" %}<br>декларации: {{ wording.scope|join(", ") }}{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>Пункты в документах не найдены.</p>
+    {% endfor %}
+    {% if profile.conditions %}
+    <h2>Особые условия</h2>
+    <ul>{% for item in profile.conditions %}<li>{{ item }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if expert %}<p><button type="submit">Сохранить правки новой версией</button></p>{% endif %}
+  </form>
+  {% if expert %}
+  <form method="post" action="/policies/{{ policy.id }}/approve?version={{ version.number }}">
+    <button type="submit" {{ "disabled" if gaps }}>Подтвердить профиль версии {{ version.number }}</button>
+  </form>
+  {% endif %}
+{% elif not job or job.finished() %}
+  <p>Профиля пока нет.</p>
+{% endif %}
+</div>

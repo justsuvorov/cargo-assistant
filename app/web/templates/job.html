@@ -1,4 +1,4 @@
-{% set labels = {'queued': 'В очереди', 'running': 'Выполняется', 'done': 'Готово', 'failed': 'Ошибка'} %}
+{% set labels = {"queued": "В очереди", "waiting": "Ожидает профиль полиса", "running": "Выполняется", 'done': 'Готово', 'failed': 'Ошибка'} %}
 <span id="job-{{ job.id }}" class="job"
   {% if not job.finished() %}hx-get="/jobs/{{ job.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
   <span class="status-{{ job.status }}">{{ labels[job.status] }}</span>

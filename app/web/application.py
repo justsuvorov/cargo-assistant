@@ -10,11 +10,13 @@ from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings, Settings
 from app.jobs.database import Database
+from app.jobs.folios import Folios
 from app.jobs.intake import Intake
+from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.storage.disk import DiskStorage
 from app.storage.layout import Keys
-from app.web import api, pages
+from app.web import api, pages, policies
 from app.web.services import Services
 
 
@@ -32,16 +34,20 @@ def create_app(settings: Settings) -> FastAPI:
     database = Database(settings.database())
     queue = Queue(database, Utc())
     application = FastAPI(title="cargo-assistant", lifespan=lifespan)
+    storage = DiskStorage(settings.storage())
     application.state.services = Services(
         settings,
         database,
         queue,
-        Intake(database, queue, DiskStorage(settings.storage()), Keys(), Utc()),
+        Intake(database, queue, storage, Keys(), Utc()),
+        Shelving(database, queue, storage, Keys()),
+        Folios(database, queue, Utc()),
         passport(settings),
     )
     application.mount(
         "/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static"
     )
+    application.include_router(policies.router)
     application.include_router(pages.router)
     application.include_router(api.router)
     return application

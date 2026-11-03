@@ -80,3 +80,18 @@ def test_generates_sql_for_postgres_without_connection(tmp_path: Path) -> None:
         equal_to(True),
         "Offline migration does not add the provider column for Postgres",
     )
+
+
+def test_generates_sql_with_build_job_of_policy_for_postgres(tmp_path: Path) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))
+    config.set_main_option("sqlalchemy.url", "postgresql+asyncpg://u:p@h/db")
+    out = tmp_path / "up.sql"
+    config.output_buffer = out.open("w", encoding="utf-8")
+    command.upgrade(config, "head", sql=True)
+    config.output_buffer.close()
+    assert_that(
+        "ALTER TABLE policies ADD COLUMN job_id" in out.read_text(encoding="utf-8"),
+        equal_to(True),
+        "Offline migration does not add the build job to policies for Postgres",
+    )

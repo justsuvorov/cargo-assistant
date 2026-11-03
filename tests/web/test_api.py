@@ -11,6 +11,7 @@ from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
+from app.jobs.folios import Folios
 from app.jobs.queue import Queue
 from app.jobs.stages import Standard
 from app.jobs.worker import Shift
@@ -72,7 +73,9 @@ def test_reports_queued_status_right_after_upload(tmp_path: Path) -> None:
 
 async def work(config: EnvSettings) -> int:
     database = Database(config.database())
-    count = await Shift(Queue(database, Utc()), Standard(Silent()), config, Silent()).drain()
+    queue = Queue(database, Utc())
+    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database)
+    count = await Shift(queue, pipelines, config, Silent()).drain()
     await database.close()
     return count
 
@@ -85,7 +88,7 @@ def test_reports_done_status_after_worker_ran(tmp_path: Path) -> None:
         response = client.get("/api/jobs/1")
     assert_that(
         (response.json()["status"], response.json()["progress"], len(response.json()["timings"])),
-        equal_to(("done", 100, 7)),
+        equal_to(("done", 100, 8)),
         "Worker does not carry the job through all stages",
     )
 

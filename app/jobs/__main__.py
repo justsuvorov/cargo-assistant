@@ -8,13 +8,20 @@ from app.core.journal import LogJournal
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
+from app.jobs.folios import Folios
+from app.jobs.gateway import Gateway, Tracked
+from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
-from app.jobs.stages import Standard
+from app.jobs.stages import Building, Routed, Standard
 from app.jobs.worker import Shift
+from app.llm.assembly import Configured
+from app.storage.disk import DiskStorage
+from app.storage.layout import Keys
 
 
 async def run() -> None:
-    settings = EnvSettings(Environment())
+    environment = Environment()
+    settings = EnvSettings(environment)
     database = Database(settings.database())
     stop = asyncio.Event()
     with suppress(NotImplementedError):
@@ -22,7 +29,26 @@ async def run() -> None:
             asyncio.get_running_loop().add_signal_handler(name, stop.set)
     journal = LogJournal(logging.getLogger("worker"))
     journal.info("Воркер запущен", 0, 0)
-    await Shift(Queue(database, Utc()), Standard(journal), settings, journal).serve(stop)
+    queue = Queue(database, Utc())
+    folio = Folios(database, queue, Utc())
+    gateway = Gateway(
+        Configured(
+            environment,
+            journal,
+            Tracked(database, asyncio.get_running_loop(), environment.llm_total_timeout),
+        )
+    )
+    pipelines = Routed(
+        Standard(journal, folio, database),
+        Building(
+            DiskStorage(settings.storage()),
+            folio,
+            Shelving(database, queue, DiskStorage(settings.storage()), Keys()),
+            gateway,
+            journal,
+        ),
+    )
+    await Shift(queue, pipelines, settings, journal).serve(stop)
     await database.close()
     journal.info("Воркер остановлен", 0, 0)
 

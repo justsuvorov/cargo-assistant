@@ -4,6 +4,7 @@ from typing import Final, Protocol, final
 
 from app.core.journal import Journal
 from app.core.settings import Settings
+from app.jobs.errors import WaitingError
 from app.jobs.queue import Jobs, Snapshot
 from app.jobs.stages import Pipelines
 
@@ -57,6 +58,9 @@ class Shift:
         self._journal.info("Задача взята в работу", job_id, declaration)
         try:
             await asyncio.wait_for(self._stages(snapshot), self._settings.timeout())
+        except WaitingError as error:
+            await self._jobs.wait(job_id, str(error))
+            self._journal.info(f"Задача ждёт: {error}", job_id, declaration)
         except Exception as error:
             self._journal.error(f"Задача не выполнена: {error}", job_id, declaration)
             await self._jobs.fail(job_id, f"{type(error).__name__}: {error}")

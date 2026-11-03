@@ -1,16 +1,28 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Полисы</h1>
+<form method="post" action="/policies/upload" enctype="multipart/form-data" class="upload">
+  <p>Загрузите пакет полиса: архив zip или папку. Файлы ГП лежат в папке полиса (или в подпапке «ГП»),
+     все дополнительные соглашения — в папке «ДС».</p>
+  <p><label>Архив zip или файлы: <input type="file" name="files" multiple></label></p>
+  <p><label>Папка целиком: <input type="file" name="files" webkitdirectory multiple></label></p>
+  <button type="submit">Загрузить пакет и собрать профиль</button>
+</form>
+<h2>Загруженные полисы</h2>
 {% if policies %}
 <table>
-  <thead><tr><th>Номер ГП</th><th>Страхователь</th></tr></thead>
+  <thead><tr><th>№</th><th>Номер ГП</th><th>Страхователь</th></tr></thead>
   <tbody>
   {% for policy in policies %}
-  <tr><td>{{ policy.number }}</td><td>{{ policy.insured }}</td></tr>
+  <tr>
+    <td><a href="/policies/{{ policy.id }}">{{ policy.id }}</a></td>
+    <td>{{ policy.number or "не определён" }}</td>
+    <td>{{ policy.insured or "не определён" }}</td>
+  </tr>
   {% endfor %}
   </tbody>
 </table>
 {% else %}
-<p>Полисов пока нет. Загрузка пакета полиса появится на следующем этапе.</p>
+<p>Полисов пока нет.</p>
 {% endif %}
 {% endblock %}

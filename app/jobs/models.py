@@ -9,14 +9,15 @@ class Base(DeclarativeBase):
 
 
 class Policy(Base):
-    """General policy with the insured party and the group that may see its data."""
+    """General policy with the insured party, the group that may see its data and its last build."""
 
     __tablename__ = "policies"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    number: Mapped[str] = mapped_column(String(64), index=True)
+    number: Mapped[str] = mapped_column(String(64), default="", index=True)
     insured: Mapped[str] = mapped_column(String(255), default="")
     access_group: Mapped[str] = mapped_column(String(128), index=True)
+    job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
 
 
 class PolicyDocument(Base):

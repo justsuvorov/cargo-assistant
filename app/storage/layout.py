@@ -1,12 +1,17 @@
 from typing import Protocol, final
 
 from app.storage.errors import EscapeError
+from app.storage.relative import Relative
 
 
 class Layout(Protocol):
     """Rules that turn identifiers and file names into storage keys."""
 
     def policy(self, policy_id: int, name: str) -> str: ...
+
+    def package(self, policy_id: int) -> str: ...
+
+    def document(self, policy_id: int, path: str) -> str: ...
 
     def source(self, declaration_id: int, name: str) -> str: ...
 
@@ -23,6 +28,12 @@ class Keys:
 
     def policy(self, policy_id: int, name: str) -> str:
         return f"policies/{policy_id}/documents/{self._name(name)}"
+
+    def package(self, policy_id: int) -> str:
+        return f"policies/{policy_id}/documents"
+
+    def document(self, policy_id: int, path: str) -> str:
+        return f"{self.package(policy_id)}/{Relative(path).path()}"
 
     def source(self, declaration_id: int, name: str) -> str:
         return f"declarations/{declaration_id}/source/{self._name(name)}"

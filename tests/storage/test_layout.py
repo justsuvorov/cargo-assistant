@@ -48,3 +48,20 @@ def test_refuses_file_name_with_path() -> None:
         raises(EscapeError),
         "File name with a path is not refused",
     )
+
+
+def test_keeps_relative_folders_in_policy_document_key() -> None:
+    policy = random.randint(1, 999)
+    assert_that(
+        Keys().document(policy, r"ДС\ДС 1\a.doc"),
+        equal_to(f"policies/{policy}/documents/ДС/ДС 1/a.doc"),
+        "Document key does not keep the folders of the package",
+    )
+
+
+def test_refuses_document_path_leading_out_of_the_package() -> None:
+    assert_that(
+        lambda: Keys().document(1, "../x.doc"),
+        raises(EscapeError),
+        "Document key leading out of the package is not refused",
+    )

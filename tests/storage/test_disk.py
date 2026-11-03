@@ -73,3 +73,16 @@ def test_reports_removed_file_as_missing(tmp_path: Path) -> None:
         equal_to(False),
         "Removed file is not reported as missing",
     )
+
+
+def test_exports_files_under_prefix_with_relative_paths(tmp_path: Path) -> None:
+    storage = DiskStorage(tmp_path / "root")
+    data = random.randbytes(16)
+    storage.save("policies/1/documents/ДС/1/a.doc", data)
+    storage.save("policies/2/documents/b.doc", b"x")
+    storage.export("policies/1/documents", tmp_path / "out")
+    assert_that(
+        (tmp_path / "out" / "ДС" / "1" / "a.doc").read_bytes(),
+        equal_to(data),
+        "Export does not keep the relative path of a file",
+    )
