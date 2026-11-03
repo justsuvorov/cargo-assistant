@@ -6,6 +6,7 @@ from app.declarations.fields import Dating
 from app.declarations.row import Row
 from app.declarations.schema import Fields
 from app.domain.clause import Absent, Clause
+from app.domain.errors import UnreadableError
 from app.domain.money import Money
 from app.domain.reason import Cause
 from app.domain.remark import Note
@@ -63,6 +64,22 @@ class Profile:
 
     def conditions(self) -> tuple[str, ...]:
         return self._conditions
+
+
+class Doubtful:
+    """Policy that cannot choose a revision of any clause and says why."""
+
+    def __init__(self, reason: str) -> None:
+        self._reason = reason
+
+    def number(self) -> str:
+        return "0000"
+
+    def clause(self, _key: str, _shipment: Shipment) -> Clause:
+        raise UnreadableError(self._reason)
+
+    def conditions(self) -> tuple[str, ...]:
+        return ()
 
 
 class Paper:

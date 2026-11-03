@@ -18,7 +18,7 @@ from app.rules.filled import Parts, Party
 from app.rules.fork import Condition, Flag, Fork, Mixed
 from app.rules.fuzzy import Fuzzy
 from app.rules.modes import Conveyance, Modes
-from app.rules.probe import Accepted, Constant, Emptied, Grounded, Probe
+from app.rules.probe import Accepted, Constant, Doubted, Emptied, Grounded, Probe
 from app.rules.rows import Rowwise
 from app.rules.semantic import Asking
 from app.rules.window import Window
@@ -154,7 +154,7 @@ class Spec(BaseModel):
             self.field,
             {form: place.title for form, place in self.forms.items()},
             self.subject,
-            Rowwise(self.field, self._probe(specs), Comments(self.comments), semantics),
+            Rowwise(self.field, Doubted(self._probe(specs)), Comments(self.comments), semantics),
         )
 
     def _probe(self, specs: Mapping[str, "Spec"]) -> Probe:

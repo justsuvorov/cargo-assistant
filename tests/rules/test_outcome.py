@@ -10,7 +10,7 @@ from app.domain.semantics import Inquiry
 from app.domain.status import Match, Mismatch, Review
 from app.domain.verdict import Ruling
 from app.rules.answers import Replies
-from app.rules.outcome import Finding, Gap, Pending, Worst
+from app.rules.outcome import Doubt, Finding, Gap, Pending, Worst
 from app.rules.wording import Comments
 
 
@@ -131,4 +131,31 @@ def test_worst_prefers_review_to_match() -> None:
         .key(),
         equal_to("review"),
         "Worst does not pick review over match",
+    )
+
+
+def test_doubt_needs_a_person_with_the_unsettled_code() -> None:
+    verdict = Doubt(uuid.uuid4().hex).verdict(Spot("2", "sum"), Comments({}), Replies((), ()))
+    assert_that(
+        (verdict.status().key(), verdict.reason().code(), verdict.reason().source()),
+        equal_to(("review", "clause.unsettled", "rule")),
+        "Doubt does not need a person with the unsettled code",
+    )
+
+
+def test_doubt_gives_its_reason_as_comment_and_reference() -> None:
+    reason = uuid.uuid4().hex
+    remark = Doubt(reason).verdict(Spot("2", "sum"), Comments({}), Replies((), ())).remark()
+    assert_that(
+        (remark.comment(), remark.reference()),
+        equal_to((reason, reason)),
+        "Doubt does not give its reason as comment and reference",
+    )
+
+
+def test_doubt_asks_the_semantic_judge_nothing() -> None:
+    assert_that(
+        Doubt(uuid.uuid4().hex).questions(Spot("2", "cargo")),
+        equal_to(()),
+        "Doubt does not stay away from the semantic judge",
     )

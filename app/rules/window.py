@@ -46,10 +46,7 @@ class Window:
         except UnreadableError:
             return Finding(Review(), "unreadable", dated)
         return next(
-            iter(
-                self._start(days, term, dated)
-                + self._end(days, term, dated, extended=self._extended(shipment, policy))
-            ),
+            iter(self._start(days, term, dated) or self._end(days, term, dated, shipment, policy)),
             Finding(Match(), "within", dated),
         )
 
@@ -65,14 +62,14 @@ class Window:
         days: Mapping[str, date],
         term: tuple[date, ...],
         values: Mapping[str, str],
-        *,
-        extended: bool,
+        shipment: Shipment,
+        policy: Policy,
     ) -> tuple[Outcome, ...]:
         if "end" not in days:
             return ()
         if days["end"] < days["start"]:
             return (Finding(Review(), "end_before_start", values),)
-        if days["end"] > term[1] and extended:
+        if days["end"] > term[1] and self._extended(shipment, policy):
             return (Finding(Match(), "extended", values),)
         return self._outside(days["end"], term, values)
 
