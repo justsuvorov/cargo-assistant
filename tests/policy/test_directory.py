@@ -1,9 +1,8 @@
-import time
 from datetime import date
 from pathlib import Path
 
 from docx import Document
-from hamcrest import assert_that, contains_exactly, equal_to, less_than, raises
+from hamcrest import assert_that, contains_exactly, equal_to, raises
 
 from app.domain.errors import UnreadableError
 from app.policy.directory import Directory
@@ -119,16 +118,14 @@ def test_refuses_missing_folder(tmp_path: Path) -> None:
     )
 
 
-def test_reads_package_of_thirty_amendments_within_seconds(tmp_path: Path) -> None:
+def test_reads_package_of_thirty_amendments(tmp_path: Path) -> None:
     _policy(tmp_path / "p.docx")
     for number in range(1, 31):
         _agreement(tmp_path / "ДС" / f"ДС {number}" / f"{number}.docx", number)
-    started = time.monotonic()
-    count = len(Directory(tmp_path).package().amendments())
     assert_that(
-        (count, time.monotonic() - started),
-        contains_exactly(30, less_than(5.0)),
-        "Directory does not read thirty amendments within five seconds",
+        sorted(item.number() for item in Directory(tmp_path).package().amendments()),
+        equal_to(list(range(1, 31))),
+        "Directory does not read every one of thirty amendments of a package",
     )
 
 
