@@ -1,0 +1,302 @@
+import random
+import uuid
+from datetime import date, timedelta
+from decimal import Decimal
+
+from hamcrest import assert_that, contains_string, equal_to
+
+from app.domain.field import Blank
+from app.domain.money import Amount
+from app.domain.revision import Revision
+from app.policy.schema.profile import Sum, Wording
+from app.policy.wording import Edition, Quoted, Unsettled
+
+
+def test_edition_governs_a_shipment_that_starts_on_the_day_it_takes_effect() -> None:
+    day = _day()
+    assert_that(
+        _edition(_wording(effective=day)).governs(_Trip("1", day)),
+        equal_to(True),
+        "Edition does not govern a shipment that starts on its first day",
+    )
+
+
+def test_edition_leaves_a_shipment_that_starts_the_day_before_it_takes_effect() -> None:
+    day = _day()
+    assert_that(
+        _edition(_wording(effective=day)).governs(_Trip("1", day - timedelta(days=1))),
+        equal_to(False),
+        "Edition does not leave a shipment that starts before its first day",
+    )
+
+
+def test_general_edition_keeps_governing_after_the_term_written_in_its_text() -> None:
+    day = _day()
+    wording = _wording(effective=day, dates=(day, day + timedelta(days=30)))
+    assert_that(
+        _edition(wording).governs(_Trip("1", day + timedelta(days=random.randint(31, 400)))),
+        equal_to(True),
+        "Edition does not keep governing after the term written in its text",
+    )
+
+
+def test_scoped_edition_governs_its_own_declaration() -> None:
+    number = str(random.randint(100, 999))
+    assert_that(
+        _edition(_wording(scope=(number,))).governs(_Trip(number, _day())),
+        equal_to(True),
+        "Edition does not govern the declaration of its scope",
+    )
+
+
+def test_scoped_edition_leaves_another_declaration() -> None:
+    number = random.randint(100, 499)
+    assert_that(
+        _edition(_wording(scope=(str(number),))).governs(_Trip(str(number + 500), _day())),
+        equal_to(False),
+        "Edition does not leave a declaration outside its scope",
+    )
+
+
+def test_scope_compares_declaration_numbers_by_digits_only() -> None:
+    assert_that(
+        tuple(
+            _edition(_wording(scope=(written,))).governs(_Trip(declared, _day()))
+            for written, declared in (
+                ("70", "070"),
+                ("070", "70"),
+                ("Р-070", "70"),
+                ("70", "Р-070"),
+                ("р 070", "№ 070"),
+            )
+        ),
+        equal_to((True, True, True, True, True)),
+        "Edition does not compare declaration numbers by digits only",
+    )
+
+
+def test_scope_keeps_trailing_zeros_of_a_declaration_number() -> None:
+    assert_that(
+        _edition(_wording(scope=("70",))).governs(_Trip("700", _day())),
+        equal_to(False),
+        "Edition does not tell 70 from 700",
+    )
+
+
+def test_scope_without_digits_leaves_a_declaration_without_digits() -> None:
+    assert_that(
+        _edition(_wording(scope=("б/н",))).governs(_Trip("без номера", _day())),
+        equal_to(False),
+        "Edition does not leave a declaration when neither number has digits",
+    )
+
+
+def test_scope_reads_a_number_of_zeros_as_zero() -> None:
+    assert_that(
+        _edition(_wording(scope=("0",))).governs(_Trip("000", _day())),
+        equal_to(True),
+        "Edition does not read a number of zeros as zero",
+    )
+
+
+def test_empty_scope_concerns_every_declaration() -> None:
+    assert_that(
+        _edition(_wording(scope=())).governs(_Trip(str(random.randint(1, 999)), _day())),
+        equal_to(True),
+        "Edition with an empty scope does not concern every declaration",
+    )
+
+
+def test_scoped_edition_supersedes_a_general_one_that_took_effect_later() -> None:
+    day = _day()
+    own = _wording(source="ДС 1", effective=day, scope=("7",), amendment=1)
+    general = _wording(source="ДС 2", effective=day + timedelta(days=9), amendment=2)
+    assert_that(
+        _edition(own, general).supersedes(_edition(general, own)),
+        equal_to(True),
+        "Edition to one declaration does not supersede a later general edition",
+    )
+
+
+def test_general_edition_leaves_a_scoped_one_in_place() -> None:
+    day = _day()
+    own = _wording(source="ДС 1", effective=day, scope=("7",), amendment=1)
+    general = _wording(source="ДС 2", effective=day + timedelta(days=9), amendment=2)
+    assert_that(
+        _edition(general, own).supersedes(_edition(own, general)),
+        equal_to(False),
+        "General edition does not leave an edition to one declaration in place",
+    )
+
+
+def test_later_edition_supersedes_an_earlier_one_despite_a_smaller_number() -> None:
+    day = _day()
+    older = _wording(source="ДС 9", effective=day, amendment=9)
+    newer = _wording(source="ДС 3", effective=day + timedelta(days=1), amendment=3)
+    assert_that(
+        _edition(newer, older).supersedes(_edition(older, newer)),
+        equal_to(True),
+        "Later edition does not supersede an earlier one with a greater number",
+    )
+
+
+def test_greater_number_supersedes_a_smaller_one_on_the_same_date() -> None:
+    day = _day()
+    smaller = _wording(source="ДС 20", effective=day, amendment=20)
+    greater = _wording(source="ДС 23", effective=day, amendment=23)
+    assert_that(
+        _edition(greater, smaller).supersedes(_edition(smaller, greater)),
+        equal_to(True),
+        "Amendment 23 does not supersede amendment 20 of the same date",
+    )
+
+
+def test_smaller_number_leaves_a_greater_one_in_place_on_the_same_date() -> None:
+    day = _day()
+    smaller = _wording(source="ДС 20", effective=day, amendment=20)
+    greater = _wording(source="ДС 23", effective=day, amendment=23)
+    assert_that(
+        _edition(smaller, greater).supersedes(_edition(greater, smaller)),
+        equal_to(False),
+        "Amendment 20 does not leave amendment 23 of the same date in place",
+    )
+
+
+def test_amendment_supersedes_the_policy_of_the_same_date() -> None:
+    day = _day()
+    policy = _wording(source="ГП п. 6", effective=day)
+    amendment = _wording(source="ДС 1", effective=day, amendment=1)
+    assert_that(
+        _edition(amendment, policy).supersedes(_edition(policy, amendment)),
+        equal_to(True),
+        "Amendment does not supersede the policy of the same date",
+    )
+
+
+def test_editions_of_equal_rank_leave_each_other_in_place() -> None:
+    day = _day()
+    first = _wording(source="ДС 4 п. 1", effective=day, amendment=4)
+    second = _wording(source="ДС 4 п. 2", effective=day, amendment=4)
+    assert_that(
+        _edition(first, second).supersedes(_edition(second, first)),
+        equal_to(False),
+        "Edition does not leave an edition of equal rank in place",
+    )
+
+
+def test_edition_leaves_a_revision_of_another_clause_in_place() -> None:
+    day = _day()
+    wording = _wording(source="ДС 5", effective=day + timedelta(days=1), amendment=5)
+    assert_that(
+        _edition(wording).supersedes(_edition(_wording(source="ГП п. 1", effective=day))),
+        equal_to(False),
+        "Edition does not leave a revision outside its clause in place",
+    )
+
+
+def test_editions_with_one_source_leave_each_other_in_place() -> None:
+    day = _day()
+    older = _wording(source="ДС 4", effective=day, amendment=4)
+    newer = _wording(source="ДС 4", effective=day + timedelta(days=1), amendment=4)
+    assert_that(
+        _edition(newer, older).supersedes(_edition(older, newer)),
+        equal_to(False),
+        "Edition does not refuse to rank a revision with its own source",
+    )
+
+
+def test_edition_gives_a_clause_that_refers_to_its_source() -> None:
+    source = uuid.uuid4().hex
+    assert_that(
+        _edition(_wording(source=source)).clause().reference(),
+        equal_to(source),
+        "Edition does not give a clause that refers to its source",
+    )
+
+
+def test_quoted_clause_gives_the_text() -> None:
+    text = uuid.uuid4().hex
+    assert_that(
+        Quoted(_wording(text=text)).text(),
+        equal_to(text),
+        "Quoted clause does not give the text of the wording",
+    )
+
+
+def test_quoted_clause_gives_the_dates() -> None:
+    days = (_day(), _day())
+    assert_that(
+        Quoted(_wording(dates=days)).dates(),
+        equal_to(days),
+        "Quoted clause does not give the dates of the wording",
+    )
+
+
+def test_quoted_clause_gives_sums_as_money() -> None:
+    value = Decimal(random.randint(1, 900)) * 1000
+    assert_that(
+        Quoted(_wording(amounts=(Sum(value=value, currency="USD"),))).amounts()[0].text(),
+        equal_to(Amount(value, "USD").text()),
+        "Quoted clause does not give the sums of the wording as money",
+    )
+
+
+def test_quoted_clause_gives_the_entries() -> None:
+    entries = (uuid.uuid4().hex, uuid.uuid4().hex)
+    assert_that(
+        Quoted(_wording(entries=entries)).entries(),
+        equal_to(entries),
+        "Quoted clause does not give the entries of the wording",
+    )
+
+
+def test_unsettled_clause_explains_itself_in_the_reference() -> None:
+    reason = uuid.uuid4().hex
+    assert_that(
+        Unsettled(reason).reference(),
+        contains_string(reason),
+        "Unsettled clause does not explain itself in the reference",
+    )
+
+
+def test_unsettled_clause_states_no_facts() -> None:
+    clause = Unsettled(uuid.uuid4().hex)
+    assert_that(
+        (clause.text(), clause.dates(), clause.amounts(), clause.entries()),
+        equal_to(("", (), (), ())),
+        "Unsettled clause does not stay without facts",
+    )
+
+
+def _day() -> date:
+    return date(2026, random.randint(1, 12), random.randint(1, 28))
+
+
+def _wording(**values: object) -> Wording:
+    return Wording.model_validate({"source": "ГП п. 1", "effective": date(2000, 1, 1), **values})
+
+
+def _edition(wording: Wording, *peers: Wording) -> Revision:
+    return Edition(wording, (wording, *peers))
+
+
+class _Trip:
+    """Shipment of a declaration that starts on a given day."""
+
+    __slots__ = ("_declaration", "_start")
+
+    def __init__(self, declaration: str, start: date) -> None:
+        self._declaration = declaration
+        self._start = start
+
+    def number(self) -> str:
+        return self._declaration
+
+    def declaration(self) -> str:
+        return self._declaration
+
+    def field(self, key: str) -> Blank:
+        return Blank(key)
+
+    def start(self) -> date:
+        return self._start
