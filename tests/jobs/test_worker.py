@@ -7,6 +7,7 @@ from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
+from app.jobs.errors import WaitingError
 from app.jobs.models import Base
 from app.jobs.queue import Queue, Snapshot
 from app.jobs.stages import Pending, Stage
@@ -162,4 +163,30 @@ def test_serves_until_stopped(tmp_path: Path) -> None:
         asyncio.run(asyncio.wait_for(serves_until_stopped(tmp_path), 30)),
         equal_to("done"),
         "Serving worker does not finish the job",
+    )
+
+
+class Waiting:
+    """Test double named waiting."""
+
+    def name(self) -> str:
+        return "profile"
+
+    async def run(self, job: Snapshot) -> None:
+        raise WaitingError(f"Ожидает профиль полиса{'' * job.id}")
+
+
+async def parks_job_that_waits_for_profile(tmp_path: Path) -> tuple[str, str]:
+    database, queue, (job,) = await prepare(tmp_path, 1)
+    await Shift(queue, Fixed((Waiting(),)), settings(tmp_path, 1), Silent()).drain()
+    snapshot = await queue.snapshot(job)
+    await database.close()
+    return snapshot.status, snapshot.error
+
+
+def test_parks_job_that_waits_for_profile(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(parks_job_that_waits_for_profile(tmp_path), 30)),
+        equal_to(("waiting", "Ожидает профиль полиса")),
+        "Job that waits for a profile is not parked but failed or finished",
     )

@@ -1,8 +1,28 @@
 import asyncio
+from pathlib import Path
 from typing import Final, Protocol, final
 
+from sqlalchemy import select
+
 from app.core.journal import Journal
+from app.jobs.building import (
+    Converting,
+    Extracting,
+    Fetching,
+    Models,
+    Reading,
+    Saving,
+    Shelf,
+)
+from app.jobs.database import Sessions
+from app.jobs.folios import Folio
+from app.jobs.models import Declaration
+from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot
+from app.policy.package import Package
+from app.policy.schema.profile import Profile
+from app.storage.disk import Storage
+from app.storage.layout import Keys
 
 
 @final
@@ -45,18 +65,94 @@ class Pending:
 
 
 @final
+class Profiled:
+    """Stage that lets a declaration go on only when the profile of its policy is approved.
+
+    A declaration that is not yet bound to a policy has nothing to wait for; binding by the
+    number of the policy is the work of a later task.
+    """
+
+    __slots__ = ("_folio", "_sessions")
+
+    def __init__(self, folio: Folio, sessions: Sessions) -> None:
+        self._folio: Final = folio
+        self._sessions: Final = sessions
+
+    def name(self) -> str:
+        return "profile"
+
+    async def run(self, job: Snapshot) -> None:
+        async with self._sessions.session() as session:
+            policy_id = await session.scalar(
+                select(Declaration.policy_id).where(Declaration.id == job.declaration())
+            )
+        if policy_id is not None:
+            await self._folio.approved(policy_id)
+
+
+@final
 class Standard:
     """Pipelines of the service where the reconciliation stages are still empty."""
 
-    __slots__ = ("_journal",)
+    __slots__ = ("_folio", "_journal", "_sessions")
 
-    def __init__(self, journal: Journal) -> None:
+    def __init__(self, journal: Journal, folio: Folio, sessions: Sessions) -> None:
         self._journal: Final = journal
+        self._folio: Final = folio
+        self._sessions: Final = sessions
 
     def stages(self, kind: str) -> tuple[Stage, ...]:
         if kind != "reconcile":
             raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
-        return tuple(
-            Pending(name, self._journal)
-            for name in ("ingest", "fields", "normalize", "bind", "check", "semantic", "report")
+        return (
+            *(Pending(name, self._journal) for name in ("ingest", "fields", "normalize", "bind")),
+            Profiled(self._folio, self._sessions),
+            *(Pending(name, self._journal) for name in ("check", "semantic", "report")),
         )
+
+
+@final
+class Building:
+    """Pipeline of a policy package: fetch, convert, read, extract with the model, save."""
+
+    __slots__ = ("_folio", "_journal", "_models", "_packages", "_storage")
+
+    def __init__(
+        self, storage: Storage, folio: Folio, packages: Packages, models: Models, journal: Journal
+    ) -> None:
+        self._storage: Final = storage
+        self._folio: Final = folio
+        self._packages: Final = packages
+        self._models: Final = models
+        self._journal: Final = journal
+
+    def stages(self, kind: str) -> tuple[Stage, ...]:
+        if kind != "profile_build":
+            raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
+        folder: Shelf[Path] = Shelf()
+        package: Shelf[Package] = Shelf()
+        profile: Shelf[Profile] = Shelf()
+        return (
+            Fetching(self._storage, Keys(), folder),
+            Converting(folder, self._journal),
+            Reading(folder, package, self._journal),
+            Extracting(self._models, package, profile),
+            Saving(self._folio, self._packages, package, profile, self._journal),
+        )
+
+
+@final
+class Routed:
+    """Pipelines that ask the first one and, when it does not know the kind, the second."""
+
+    __slots__ = ("_first", "_second")
+
+    def __init__(self, first: Pipelines, second: Pipelines) -> None:
+        self._first: Final = first
+        self._second: Final = second
+
+    def stages(self, kind: str) -> tuple[Stage, ...]:
+        try:
+            return self._first.stages(kind)
+        except UnknownKindError:
+            return self._second.stages(kind)

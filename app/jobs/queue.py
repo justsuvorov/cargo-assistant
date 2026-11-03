@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
 from app.jobs.database import Sessions
-from app.jobs.models import Job
+from app.jobs.models import Declaration, Job
 
 
 @final
@@ -69,6 +69,10 @@ class Jobs(Protocol):
     async def finish(self, job_id: int) -> None: ...
 
     async def fail(self, job_id: int, error: str) -> None: ...
+
+    async def wait(self, job_id: int, reason: str) -> None: ...
+
+    async def release(self, policy_id: int) -> int: ...
 
     async def revive(self, idle: float, attempts: int) -> int: ...
 
@@ -150,6 +154,26 @@ class Queue:
 
     async def fail(self, job_id: int, error: str) -> None:
         await self._change(job_id, status="failed", error=error)
+
+    async def wait(self, job_id: int, reason: str) -> None:
+        await self._change(job_id, status="waiting", error=reason, locked_at=None)
+
+    async def release(self, policy_id: int) -> int:
+        async with self._sessions.session() as session:
+            found = await session.execute(
+                update(Job)
+                .where(
+                    Job.status == "waiting",
+                    Job.id.in_(
+                        select(Declaration.job_id).where(Declaration.policy_id == policy_id)
+                    ),
+                )
+                .values(status="queued", error="", attempts=0, updated_at=self._clock.now())
+                .returning(Job.id)
+                .execution_options(synchronize_session=False)
+            )
+            await session.commit()
+            return len(found.all())
 
     async def revive(self, idle: float, attempts: int) -> int:
         limit = self._clock.now() - timedelta(seconds=idle)

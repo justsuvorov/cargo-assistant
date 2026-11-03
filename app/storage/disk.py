@@ -15,6 +15,8 @@ class Storage(Protocol):
 
     def remove(self, key: str) -> None: ...
 
+    def export(self, prefix: str, folder: Path) -> None: ...
+
 
 @final
 class DiskStorage:
@@ -38,6 +40,14 @@ class DiskStorage:
 
     def remove(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)
+
+    def export(self, prefix: str, folder: Path) -> None:
+        base = self._path(prefix)
+        for path in sorted(base.rglob("*")):
+            if path.is_file():
+                target = folder / path.relative_to(base)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(path.read_bytes())
 
     def _path(self, key: str) -> Path:
         path = (self._root / key).resolve()
