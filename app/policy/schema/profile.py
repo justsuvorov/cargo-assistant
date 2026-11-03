@@ -15,11 +15,16 @@ class Sum(BaseModel):
 
 
 class Wording(BaseModel):
-    """One revision of a clause: where it comes from, since when and for which declarations."""
+    """One revision of a clause: where it comes from, since when and for which declarations.
+
+    The point is the number of the policy paragraph it words, such as 12.5; it replaces only
+    that paragraph and those nested in it, and an empty point stands for the whole clause.
+    """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     source: str
+    point: str = ""
     amendment: int = 0
     effective: date
     scope: Literal["all"] | tuple[str, ...] = "all"

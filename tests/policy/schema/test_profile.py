@@ -27,6 +27,14 @@ def test_wording_keeps_the_declarations_of_its_scope() -> None:
     )
 
 
+def test_wording_stands_for_the_whole_clause_by_default() -> None:
+    assert_that(
+        Wording(source=uuid.uuid4().hex, effective=date(2026, 1, random.randint(1, 28))).point,
+        equal_to(""),
+        "Wording does not stand for the whole clause by default",
+    )
+
+
 def test_profile_rejects_an_unknown_field() -> None:
     body = {
         "number": uuid.uuid4().hex,

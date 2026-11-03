@@ -5,7 +5,11 @@ from app.domain.shipment import Shipment
 
 
 class Policy(Protocol):
-    """Approved profile of a general policy with its amendments and special conditions."""
+    """Approved profile of a general policy with its amendments and special conditions.
+
+    Asking for a clause raises UnreadableError when its revision cannot be chosen, so that
+    a card tells an unknown clause from an absent one and asks a person.
+    """
 
     def number(self) -> str: ...
 
