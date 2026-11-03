@@ -1,11 +1,14 @@
 import hashlib
 import os
 import shutil
+import signal
 import subprocess
+import sys
 import tempfile
+import threading
 import time
 from collections.abc import Iterator
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import AbstractContextManager, contextmanager, suppress
 from pathlib import Path
 from typing import Final, Protocol, final
 
@@ -18,6 +21,7 @@ _SLOTS = 4
 _STALE = 300.0
 _PAUSE = 0.05
 _WAIT = 300.0
+_LIMIT = 120.0
 _FORMATS = (bytes.fromhex("D0CF11E0A1B11AE1"), b"{\\rtf", b"PK", b"<?xml")
 
 
@@ -70,8 +74,9 @@ class Profiles:
         try:
             lock.mkdir()
         except FileExistsError:
-            if time.time() - lock.stat().st_mtime > _STALE:
-                shutil.rmtree(lock, ignore_errors=True)
+            with suppress(FileNotFoundError):
+                if time.time() - lock.stat().st_mtime > _STALE:
+                    shutil.rmtree(lock, ignore_errors=True)
             return False
         return True
 
@@ -122,14 +127,17 @@ class Doc:
                 raise UnreadableError(
                     f"Файл {self._path.name} не удалось преобразовать через LibreOffice"
                 )
-            partial = cached.with_name(f"{cached.name}.{os.getpid()}.part")
+            partial = cached.with_name(f"{cached.name}.{os.getpid()}.{threading.get_ident()}.part")
             shutil.copyfile(ready, partial)
             partial.replace(cached)
         return cached
 
     def _convert(self, program: str, folder: str, profile: Path) -> None:
+        failure = UnreadableError(
+            f"Файл {self._path.name} не удалось преобразовать через LibreOffice"
+        )
         try:
-            subprocess.run(
+            process = subprocess.Popen(
                 [
                     program,
                     f"-env:UserInstallation={profile.as_uri()}",
@@ -141,11 +149,28 @@ class Doc:
                     folder,
                     str(self._path),
                 ],
-                check=True,
-                capture_output=True,
-                timeout=120,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
             )
-        except (subprocess.SubprocessError, OSError) as error:
-            raise UnreadableError(
-                f"Файл {self._path.name} не удалось преобразовать через LibreOffice"
-            ) from error
+        except OSError as error:
+            raise failure from error
+        try:
+            code = process.wait(timeout=_LIMIT)
+        except subprocess.TimeoutExpired as error:
+            self._stop(process)
+            raise failure from error
+        if code != 0:
+            raise failure
+
+    def _stop(self, process: subprocess.Popen[bytes]) -> None:
+        if sys.platform == "win32":
+            subprocess.run(
+                [shutil.which("taskkill") or "taskkill", "/F", "/T", "/PID", str(process.pid)],
+                check=False,
+                capture_output=True,
+            )
+        else:
+            os.killpg(process.pid, signal.SIGKILL)
+        process.wait()

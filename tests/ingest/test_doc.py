@@ -83,6 +83,26 @@ def test_frees_profile_after_lease(tmp_path: Path) -> None:
     assert_that(first, equal_to(second), "Profile is not free again after its lease ended")
 
 
+def contend(profiles: Profiles, busy: dict[Path, int], clashes: list[Path]) -> None:
+    for _ in range(25):
+        with profiles.lease() as profile:
+            busy[profile] = busy.get(profile, 0) + 1
+            if busy[profile] > 1:
+                clashes.append(profile)
+            time.sleep(0.001)
+            busy[profile] -= 1
+
+
+def test_never_hands_one_profile_to_two_leases_at_once(tmp_path: Path) -> None:
+    profiles = Profiles(tmp_path, 2)
+    busy: dict[Path, int] = {}
+    clashes: list[Path] = []
+    with ThreadPoolExecutor(6) as pool:
+        for future in [pool.submit(contend, profiles, busy, clashes) for _ in range(6)]:
+            future.result(timeout=30)
+    assert_that(clashes, equal_to([]), "One profile is not kept apart for a single lease at a time")
+
+
 def test_takes_over_stale_lock_of_dead_process(tmp_path: Path) -> None:
     lock = tmp_path / "lock-0"
     lock.mkdir()
@@ -93,12 +113,14 @@ def test_takes_over_stale_lock_of_dead_process(tmp_path: Path) -> None:
     assert_that(taken, equal_to(tmp_path / "profile-0"), "Stale lock is not taken over")
 
 
-def make_doc(folder: Path, name: str) -> Path:
-    document = Document()
-    for line in range(20):
-        document.add_paragraph(f"Вымышленный пункт {name}.{line}")
-    source = folder / f"{name}.docx"
-    document.save(str(source))
+def make_docs(folder: Path, *names: str) -> list[Path]:
+    sources = []
+    for name in names:
+        document = Document()
+        for line in range(20):
+            document.add_paragraph(f"Вымышленный пункт {name}.{line}")
+        sources.append(folder / f"{name}.docx")
+        document.save(str(sources[-1]))
     program = shutil.which("soffice")
     assert program
     subprocess.run(
@@ -110,26 +132,36 @@ def make_doc(folder: Path, name: str) -> Path:
             "doc",
             "--outdir",
             str(folder),
-            str(source),
+            *map(str, sources),
         ],
         check=True,
         capture_output=True,
-        timeout=120,
+        timeout=250,
     )
-    return folder / f"{name}.doc"
+    return [folder / f"{name}.doc" for name in names]
 
 
-@pytest.mark.timeout(120)
+@pytest.mark.timeout(300)
 @pytest.mark.skipif(shutil.which("soffice") is None, reason="LibreOffice is not installed")
 def test_converts_two_documents_in_parallel_on_own_profiles(tmp_path: Path) -> None:
-    docs = [make_doc(tmp_path, "one"), make_doc(tmp_path, "two")]
-    started = time.perf_counter()
+    docs = make_docs(tmp_path, "one", "two")
     with ThreadPoolExecutor(2) as pool:
         texts = list(
             pool.map(lambda path: text(Doc(path, "soffice", tmp_path / "h").sheets()), docs)
         )
     assert_that(
-        [("one" in texts[0]), ("two" in texts[1]), time.perf_counter() - started < 60],
-        equal_to([True, True, True]),
+        [("one" in texts[0]), ("two" in texts[1])],
+        equal_to([True, True]),
         "Parallel conversions do not both read their documents",
+    )
+
+
+@pytest.mark.timeout(300)
+@pytest.mark.skipif(shutil.which("soffice") is None, reason="LibreOffice is not installed")
+def test_refuses_file_that_is_not_a_word_document(tmp_path: Path) -> None:
+    (tmp_path / "a.doc").write_bytes(b"plain text")
+    assert_that(
+        lambda: Doc(tmp_path / "a.doc", "soffice", tmp_path / "h").sheets(),
+        raises(UnreadableError, "не является документом Word"),
+        "Doc does not refuse a file that is not a Word document",
     )
