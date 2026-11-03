@@ -1,11 +1,12 @@
 from typing import Final, Protocol, final
 
 from app.domain.clause import Clause
+from app.domain.errors import UnreadableError
 from app.domain.field import Field
 from app.domain.policy import Policy
 from app.domain.shipment import Shipment
 from app.domain.status import Match, Status
-from app.rules.outcome import Finding, Gap, Outcome
+from app.rules.outcome import Doubt, Finding, Gap, Outcome
 from app.rules.presence import Stated
 from app.rules.tokens import Tokens
 
@@ -22,6 +23,23 @@ class Measure(Protocol):
     def outcome(
         self, field: Field, clause: Clause, shipment: Shipment, policy: Policy
     ) -> Outcome: ...
+
+
+@final
+class Doubted:
+    """Probe that asks a person when a value it needs cannot be read, such as a policy clause
+    whose revision cannot be chosen, whatever step of the inner probe found that out."""
+
+    __slots__ = ("_probe",)
+
+    def __init__(self, probe: Probe) -> None:
+        self._probe: Final = probe
+
+    def outcome(self, field: Field, shipment: Shipment, policy: Policy) -> Outcome:
+        try:
+            return self._probe.outcome(field, shipment, policy)
+        except UnreadableError as error:
+            return Doubt(str(error))
 
 
 @final

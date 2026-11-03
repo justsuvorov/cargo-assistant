@@ -1,16 +1,17 @@
 from collections.abc import Mapping
 from datetime import date
 
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, equal_to, raises
 
 from app.declarations.schema import Fields
+from app.domain.errors import UnreadableError
 from app.domain.place import Spot
 from app.domain.policy import Policy, Vacant
 from app.domain.verdict import Verdict
 from app.rules.answers import Replies
 from app.rules.window import Window
 from app.rules.wording import Comments
-from tests.rules.fakes import Paper, Profile, Text
+from tests.rules.fakes import Doubtful, Paper, Profile, Text
 
 
 def _verdict(
@@ -134,4 +135,47 @@ def test_mismatch_comment_names_the_end_of_the_term() -> None:
         .comment(),
         equal_to("до 20.09.2026"),
         "Window does not put the end of the term into the comment",
+    )
+
+
+def test_end_inside_the_term_needs_no_answer_about_the_extension() -> None:
+    assert_that(
+        _verdict(
+            Window(("end",), "term_extension"),
+            "period_end",
+            {"period_start": ("01.09.2026",), "period_end": ("15.09.2026",)},
+            Doubtful("редакция не выбрана"),
+        )
+        .reason()
+        .code(),
+        equal_to("period_end.within"),
+        "Window does not leave the extension alone when the end is inside the term",
+    )
+
+
+def test_end_past_the_term_refuses_to_answer_when_the_extension_is_unknown() -> None:
+    assert_that(
+        lambda: _verdict(
+            Window(("end",), "term_extension"),
+            "period_end",
+            {"period_start": ("01.09.2026",), "period_end": ("21.09.2026",)},
+            Doubtful("редакция не выбрана"),
+        ),
+        raises(UnreadableError),
+        "Window does not refuse to answer when the extension is unknown",
+    )
+
+
+def test_start_outside_the_term_needs_no_answer_about_the_extension() -> None:
+    assert_that(
+        _verdict(
+            Window(("start", "end"), "term_extension"),
+            "period",
+            {"period": ("01.10.2026", "по", "15.10.2026")},
+            Doubtful("редакция не выбрана"),
+        )
+        .reason()
+        .code(),
+        equal_to("period.after_policy_end"),
+        "Window does not leave the extension alone when the start is outside the term",
     )

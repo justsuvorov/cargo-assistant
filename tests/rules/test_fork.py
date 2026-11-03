@@ -1,6 +1,7 @@
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, equal_to, raises
 
 from app.declarations.schema import Fields
+from app.domain.errors import UnreadableError
 from app.domain.place import Spot
 from app.domain.policy import Policy, Vacant
 from app.domain.status import Match, Mismatch
@@ -9,7 +10,7 @@ from app.rules.fork import Flag, Fork, Mixed
 from app.rules.modes import Modes
 from app.rules.probe import Constant
 from app.rules.wording import Comments
-from tests.rules.fakes import Paper, Profile, Text
+from tests.rules.fakes import Doubtful, Paper, Profile, Text
 
 
 def test_flag_holds_when_the_profile_states_the_clause() -> None:
@@ -28,6 +29,15 @@ def test_flag_fails_without_a_profile() -> None:
         Flag("carrier_risk").holds(Paper("4", "vertical", ({},)).shipments()[0], Vacant("1")),
         equal_to(False),
         "Flag does not fail for an absent clause",
+    )
+
+
+def test_flag_refuses_to_answer_when_the_policy_cannot_choose() -> None:
+    shipment = Paper("4", "vertical", ({},)).shipments()[0]
+    assert_that(
+        lambda: Flag("carrier_risk").holds(shipment, Doubtful("редакция не выбрана")),
+        raises(UnreadableError),
+        "Flag does not refuse to answer when the policy cannot choose",
     )
 
 

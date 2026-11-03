@@ -3,36 +3,72 @@ import uuid
 from datetime import date, timedelta
 from decimal import Decimal
 
-from hamcrest import assert_that, contains_string, equal_to
+from hamcrest import assert_that, equal_to, raises
 
+from app.domain.errors import UnreadableError
 from app.domain.field import Blank
 from app.domain.money import Amount
 from app.domain.revision import Revision
 from app.policy.schema.profile import Sum, Wording
-from app.policy.wording import Edition, Quoted, Unsettled
+from app.policy.wording import Edition, Quoted
 
 
-def test_edition_governs_a_shipment_that_starts_on_the_day_it_takes_effect() -> None:
+def test_amendment_governs_a_shipment_that_starts_on_the_day_it_takes_effect() -> None:
     day = _day()
     assert_that(
-        _edition(_wording(effective=day)).governs(_Trip("1", day)),
+        _edition(_wording(effective=day, amendment=1)).governs(_Trip("1", day)),
         equal_to(True),
-        "Edition does not govern a shipment that starts on its first day",
+        "Amendment does not govern a shipment that starts on its first day",
     )
 
 
-def test_edition_leaves_a_shipment_that_starts_the_day_before_it_takes_effect() -> None:
+def test_amendment_leaves_a_shipment_that_starts_the_day_before_it_takes_effect() -> None:
+    day = _day()
+    wording = _wording(effective=day, amendment=random.randint(1, 30))
+    assert_that(
+        _edition(wording).governs(_Trip("1", day - timedelta(days=1))),
+        equal_to(False),
+        "Amendment does not leave a shipment that starts before its first day",
+    )
+
+
+def test_policy_wording_governs_a_shipment_that_starts_before_its_date() -> None:
     day = _day()
     assert_that(
-        _edition(_wording(effective=day)).governs(_Trip("1", day - timedelta(days=1))),
+        _edition(_wording(effective=day)).governs(_Trip("1", day - timedelta(days=400))),
+        equal_to(True),
+        "Policy wording does not govern a shipment that starts before its date",
+    )
+
+
+def test_policy_wording_needs_no_start_of_the_shipment() -> None:
+    assert_that(
+        _edition(_wording(effective=_day())).governs(_Undated()),
+        equal_to(True),
+        "Policy wording does not govern a shipment without a readable start",
+    )
+
+
+def test_amendment_cannot_say_whether_it_governs_a_shipment_without_a_start() -> None:
+    edition = _edition(_wording(effective=_day(), amendment=1))
+    assert_that(
+        lambda: edition.governs(_Undated()),
+        raises(UnreadableError),
+        "Amendment does not refuse to judge a shipment without a readable start",
+    )
+
+
+def test_amendment_to_another_declaration_needs_no_start_of_the_shipment() -> None:
+    assert_that(
+        _edition(_wording(effective=_day(), amendment=1, scope=("777",))).governs(_Undated()),
         equal_to(False),
-        "Edition does not leave a shipment that starts before its first day",
+        "Amendment to another declaration does not leave a shipment without a start",
     )
 
 
 def test_general_edition_keeps_governing_after_the_term_written_in_its_text() -> None:
     day = _day()
-    wording = _wording(effective=day, dates=(day, day + timedelta(days=30)))
+    wording = _wording(effective=day, amendment=1, dates=(day, day + timedelta(days=30)))
     assert_that(
         _edition(wording).governs(_Trip("1", day + timedelta(days=random.randint(31, 400)))),
         equal_to(True),
@@ -250,24 +286,6 @@ def test_quoted_clause_gives_the_entries() -> None:
     )
 
 
-def test_unsettled_clause_explains_itself_in_the_reference() -> None:
-    reason = uuid.uuid4().hex
-    assert_that(
-        Unsettled(reason).reference(),
-        contains_string(reason),
-        "Unsettled clause does not explain itself in the reference",
-    )
-
-
-def test_unsettled_clause_states_no_facts() -> None:
-    clause = Unsettled(uuid.uuid4().hex)
-    assert_that(
-        (clause.text(), clause.dates(), clause.amounts(), clause.entries()),
-        equal_to(("", (), (), ())),
-        "Unsettled clause does not stay without facts",
-    )
-
-
 def _day() -> date:
     return date(2026, random.randint(1, 12), random.randint(1, 28))
 
@@ -300,3 +318,21 @@ class _Trip:
 
     def start(self) -> date:
         return self._start
+
+
+class _Undated:
+    """Shipment whose start date cannot be read."""
+
+    __slots__ = ()
+
+    def number(self) -> str:
+        return "1"
+
+    def declaration(self) -> str:
+        return "1"
+
+    def field(self, key: str) -> Blank:
+        return Blank(key)
+
+    def start(self) -> date:
+        raise UnreadableError("Не найдена дата начала периода страхования")

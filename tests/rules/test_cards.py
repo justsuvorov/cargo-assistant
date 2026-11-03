@@ -11,7 +11,7 @@ from app.domain.policy import Policy, Vacant
 from app.domain.status import Match
 from app.rules.cards import Cards
 from app.rules.errors import CardError
-from tests.rules.fakes import Mute, Oracle, Paper, Profile, Text
+from tests.rules.fakes import Doubtful, Mute, Oracle, Paper, Profile, Text
 
 
 def _folder() -> Path:
@@ -356,4 +356,16 @@ def test_special_conditions_accept_a_transport_value() -> None:
         _codes(Paper("23", "psg", (row,)), policy, "transport"),
         has_item("transport.accepted"),
         "Cards does not accept a transport value from the special conditions",
+    )
+
+
+def test_card_asks_a_person_when_the_policy_cannot_choose_a_revision() -> None:
+    assert_that(
+        _codes(
+            Paper("1", "psg", (_row("Мебель", "авто", ""),)),
+            Doubtful("редакция не выбрана"),
+            "sum",
+        ),
+        equal_to(("clause.unsettled",)),
+        "Card does not ask a person when the policy cannot choose a revision",
     )

@@ -68,6 +68,28 @@ class Gap:
 
 
 @final
+class Doubt:
+    """Outcome of a check whose policy clause cannot be chosen: it needs a person, and the
+    reason stands in place of the reference to a clause."""
+
+    __slots__ = ("_reason",)
+
+    def __init__(self, reason: str) -> None:
+        self._reason: Final = reason
+
+    def questions(self, _place: Place) -> tuple[Question, ...]:
+        return ()
+
+    def verdict(self, place: Place, _wording: Wording, _answers: Answers) -> Verdict:
+        return Ruling(
+            place,
+            Review(),
+            Cause("clause.unsettled", "rule"),
+            Note(self._reason, self._reason),
+        )
+
+
+@final
 class Pending:
     """Outcome that a semantic judge decides: a question now, its answer when it comes."""
 

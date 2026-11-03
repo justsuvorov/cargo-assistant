@@ -12,9 +12,9 @@ from app.domain.status import Match, Mismatch, Review
 from app.domain.verdict import Verdict
 from app.rules.answers import Replies
 from app.rules.outcome import Finding, Outcome
-from app.rules.probe import Accepted, Constant, Emptied, Grounded, Probe
+from app.rules.probe import Accepted, Constant, Doubted, Emptied, Grounded, Probe
 from app.rules.wording import Comments
-from tests.rules.fakes import Paper, Profile, Text
+from tests.rules.fakes import Doubtful, Paper, Profile, Text
 
 
 class _Echo:
@@ -126,4 +126,36 @@ def test_stated_clause_reaches_the_measure() -> None:
         .reference(),
         equal_to("ГП п. 12"),
         "Grounded does not hand the stated clause to the measure",
+    )
+
+
+def test_doubted_probe_keeps_the_outcome_of_the_inner_probe() -> None:
+    assert_that(
+        _verdict(Doubted(Constant(Match(), "filled")), "beneficiary", ("ООО",), Vacant("1"))
+        .reason()
+        .code(),
+        equal_to("beneficiary.filled"),
+        "Doubted does not keep the outcome of the inner probe",
+    )
+
+
+def test_doubted_probe_asks_a_person_when_the_policy_cannot_choose() -> None:
+    verdict = _verdict(
+        Doubted(Grounded("limit", _Echo())), "sum", ("1 000",), Doubtful("редакция не выбрана")
+    )
+    assert_that(
+        (verdict.status().key(), verdict.reason().code(), verdict.reason().source()),
+        equal_to(("review", "clause.unsettled", "rule")),
+        "Doubted does not ask a person when the policy cannot choose",
+    )
+
+
+def test_doubted_probe_explains_why_the_policy_cannot_choose() -> None:
+    reason = f"причина {random.randint(1, 999)}"
+    assert_that(
+        _verdict(Doubted(Grounded("limit", _Echo())), "sum", ("1 000",), Doubtful(reason))
+        .remark()
+        .comment(),
+        equal_to(reason),
+        "Doubted does not explain why the policy cannot choose",
     )

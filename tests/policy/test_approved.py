@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from hamcrest import assert_that, contains_string, equal_to
+from hamcrest import assert_that, contains_string, equal_to, raises
 
 from app.domain.clause import Absent
 from app.domain.errors import UnreadableError
@@ -47,11 +47,21 @@ def test_clause_missing_from_the_profile_is_absent() -> None:
 
 def test_clause_is_absent_when_no_revision_is_in_force_yet() -> None:
     day = _day()
-    profile = _profile({"term": (_wording("ГП п. 6", day),)})
+    profile = _profile({"term": (_wording("ДС 1", day, amendment=1),)})
     assert_that(
         Approved(profile).clause("term", _Trip("1", day - timedelta(days=1))).reference(),
         equal_to(Absent("term").reference()),
         "Clause is not absent when no revision is in force yet",
+    )
+
+
+def test_policy_wording_applies_to_a_shipment_that_starts_before_its_date() -> None:
+    day = _day()
+    profile = _profile({"term": (_wording("ГП п. 6", day),)})
+    assert_that(
+        Approved(profile).clause("term", _Trip("1", day - timedelta(days=400))).reference(),
+        equal_to("ГП п. 6"),
+        "Policy wording does not apply to a shipment that starts before its date",
     )
 
 
@@ -223,19 +233,12 @@ def test_clause_finds_the_declaration_by_digits_only() -> None:
     )
 
 
-def test_revisions_of_equal_rank_name_both_sources_for_a_person() -> None:
+def test_revisions_of_equal_rank_name_both_sources_in_the_error() -> None:
+    policy = Approved(_profile({"transport": _rivals()}))
     assert_that(
-        Approved(_rivals(_day())).clause("transport", _Trip("1", _day())).reference(),
-        contains_string("ДС 4 п. 1, ДС 4 п. 2"),
-        "Revisions of equal rank do not name both sources for a person",
-    )
-
-
-def test_revisions_of_equal_rank_state_no_facts() -> None:
-    assert_that(
-        Approved(_rivals(_day())).clause("transport", _Trip("1", _day())).text(),
-        equal_to(""),
-        "Revisions of equal rank do not stay without a chosen text",
+        lambda: policy.clause("transport", _Trip("1", _day())),
+        raises(UnreadableError, "ДС 4 п. 1, ДС 4 п. 2"),
+        "Revisions of equal rank do not name both sources in the error",
     )
 
 
@@ -251,12 +254,21 @@ def test_repeated_revision_counts_once() -> None:
     )
 
 
-def test_clause_of_a_shipment_without_a_start_explains_it_in_the_reference() -> None:
+def test_amended_clause_cannot_be_chosen_for_a_shipment_without_a_start() -> None:
+    policy = Approved(_profile({"limit": (_wording("ДС 1", _day(), amendment=1),)}))
+    assert_that(
+        lambda: policy.clause("limit", _Undated()),
+        raises(UnreadableError),
+        "Amended clause does not refuse a shipment without a start",
+    )
+
+
+def test_policy_wording_stays_readable_for_a_shipment_without_a_start() -> None:
     profile = _profile({"limit": (_wording("ГП п. 12", _day()),)})
     assert_that(
         Approved(profile).clause("limit", _Undated()).reference(),
-        contains_string("дата начала перевозки"),
-        "Clause of a shipment without a start does not explain it in the reference",
+        equal_to("ГП п. 12"),
+        "Policy wording does not stay readable for a shipment without a start",
     )
 
 
@@ -392,23 +404,115 @@ def test_real_cards_ask_a_person_when_the_limit_is_absent() -> None:
     )
 
 
-def test_real_cards_ask_a_person_when_no_term_is_in_force_on_the_start() -> None:
+def test_real_cards_reject_a_shipment_that_starts_before_the_term() -> None:
     row = {**_row(), "period_start": ("01.02.2020",), "period_end": ("05.02.2020",)}
     verdict = _verdicts("period_start", _paper("1", row), Approved(_cover()))[0]
     assert_that(
         (verdict.status().key(), verdict.reason().code()),
-        equal_to(("review", "clause.absent")),
-        "Real cards do not ask a person when no term is in force on the start",
+        equal_to(("mismatch", "period_start.before_policy_start")),
+        "Real cards do not reject a shipment that starts before the term",
     )
 
 
-def test_real_cards_ask_a_person_about_a_sum_of_a_shipment_without_a_start() -> None:
+def test_real_cards_ask_a_person_about_an_amended_sum_of_a_shipment_without_a_start() -> None:
     row = {key: value for key, value in _row().items() if key != "period_start"}
     verdict = _verdicts("sum", _paper("1", row), Approved(_cover()))[0]
     assert_that(
         (verdict.status().key(), verdict.reason().code()),
-        equal_to(("review", "clause.absent")),
-        "Real cards do not ask a person about a sum of a shipment without a start",
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person about an amended sum of a shipment without a start",
+    )
+
+
+def test_real_cards_check_a_sum_against_the_policy_limit_without_a_start() -> None:
+    row = {key: value for key, value in _row().items() if key != "period_start"}
+    limit = _wording("ГП п. 12", date(2026, 1, 15), amounts=(_rubles(1000000),))
+    assert_that(
+        _statuses("sum", _paper("1", row), Approved(_profile({"limit": (limit,)}))),
+        equal_to(("match",)),
+        "Real cards do not check a sum against the policy limit without a start",
+    )
+
+
+def test_real_cards_ask_a_person_about_a_carrier_when_the_risk_date_is_unknown() -> None:
+    risk = _wording("ДС 2", date(2026, 3, 1), amendment=2)
+    verdict = _verdicts(
+        "carrier",
+        Paper("1", "vertical", ({"carrier": ("ООО Ромашка",), "period": ("неизвестно",)},)),
+        Approved(_profile({"carrier_risk": (risk,)})),
+    )[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person about a carrier when the risk date is unknown",
+    )
+
+
+def test_real_cards_ask_a_person_about_a_carrier_when_the_risk_is_disputed() -> None:
+    verdict = _verdicts(
+        "carrier",
+        Paper("1", "vertical", ({"carrier": ("ООО Ромашка",), "period": ("10.06.2026",)},)),
+        Approved(_profile({"carrier_risk": _rivals()})),
+    )[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person about a carrier when the risk is disputed",
+    )
+
+
+def test_real_cards_only_want_a_carrier_filled_when_the_profile_has_no_risk() -> None:
+    assert_that(
+        _statuses(
+            "carrier",
+            Paper("1", "vertical", ({"carrier": ("ООО Ромашка",), "period": ("неизвестно",)},)),
+            Approved(_profile({})),
+        ),
+        equal_to(("match",)),
+        "Real cards do not settle for a filled carrier when the profile has no risk",
+    )
+
+
+def test_real_cards_ask_a_person_about_an_end_past_the_term_when_extension_is_disputed() -> None:
+    row = {**_row(), "period_end": ("15.02.2030",)}
+    profile = _profile({**_cover().clauses, "term_extension": _rivals()})
+    verdict = _verdicts("period_end", _paper("1", row), Approved(profile))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person about an end past the term when extension is disputed",
+    )
+
+
+def test_real_cards_match_an_end_inside_the_term_whatever_the_extension() -> None:
+    profile = _profile({**_cover().clauses, "term_extension": _rivals()})
+    assert_that(
+        _statuses("period_end", _paper("1", _row()), Approved(profile)),
+        equal_to(("match",)),
+        "Real cards do not match an end inside the term whatever the extension",
+    )
+
+
+def test_real_cards_ask_a_person_about_cargo_when_the_exclusions_are_disputed() -> None:
+    profile = _profile(
+        {"object": (_wording("ГП п. 5", date(2026, 1, 15)),), "exclusions_cargo": _rivals()}
+    )
+    row = {**_row(), "cargo": ("Мебель",)}
+    verdict = _verdicts("cargo", _paper("1", row), Approved(profile))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person about cargo when the exclusions are disputed",
+    )
+
+
+def test_real_cards_ask_a_person_when_the_accepted_values_are_disputed() -> None:
+    profile = _profile({**_cover().clauses, "accepted.sum": _rivals()})
+    verdict = _verdicts("sum", _paper("1", _row()), Approved(profile))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", "clause.unsettled")),
+        "Real cards do not ask a person when the accepted values are disputed",
     )
 
 
@@ -459,15 +563,10 @@ def _succession(day: date) -> Profile:
     )
 
 
-def _rivals(day: date) -> Profile:
-    start = day - timedelta(days=400)
-    return _profile(
-        {
-            "transport": (
-                _wording("ДС 4 п. 1", start, amendment=4),
-                _wording("ДС 4 п. 2", start, amendment=4),
-            )
-        }
+def _rivals() -> tuple[Wording, ...]:
+    return (
+        _wording("ДС 4 п. 1", date(2020, 1, 1), amendment=4),
+        _wording("ДС 4 п. 2", date(2020, 1, 1), amendment=4),
     )
 
 
@@ -515,7 +614,8 @@ def _paper(number: str, row: Mapping[str, tuple[str, ...]]) -> Paper:
 
 def _verdicts(field: str, paper: Paper, policy: Policy) -> tuple[Verdict, ...]:
     folder = Path(__file__).resolve().parents[2] / "cards"
-    card = next(card for card in Cards(folder, Mute()).cards("psg") if card.field() == field)
+    cards = Cards(folder, Mute()).cards(paper.form())
+    card = next(card for card in cards if card.field() == field)
     return card.verdicts(paper, policy)
 
 

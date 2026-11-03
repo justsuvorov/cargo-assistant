@@ -35,39 +35,15 @@ class Quoted:
 
 
 @final
-class Unsettled:
-    """Policy clause whose revision the code may not choose: it states no facts, so a card
-    asks a person, and its reference says why."""
-
-    __slots__ = ("_reason",)
-
-    def __init__(self, reason: str) -> None:
-        self._reason: Final = reason
-
-    def reference(self) -> str:
-        return self._reason
-
-    def text(self) -> str:
-        return ""
-
-    def dates(self) -> tuple[date, ...]:
-        return ()
-
-    def amounts(self) -> tuple[Money, ...]:
-        return ()
-
-    def entries(self) -> tuple[str, ...]:
-        return ()
-
-
-@final
 class Edition:
     """Revision read from one wording of a clause; the only home of the choice rule D-33.
 
-    It governs a shipment from the day it takes effect, when its scope names the declaration
-    of the shipment by digits (D-30) or concerns every declaration; an empty scope means the
-    same as in a package amendment. Dates in its text do not end it: only a superseding
-    revision does, and the term of the policy is the business of a card.
+    It concerns a shipment when its scope names the declaration of the shipment by digits
+    (D-30) or every declaration; an empty scope means the same as in a package amendment. The
+    wording of the policy itself, amendment 0, governs on any date, so that a shipment outside
+    the term reaches the card; an amendment governs from the day it takes effect, and an
+    unreadable start of the shipment raises UnreadableError. Dates in the text do not end a
+    revision: only a superseding one does, and the term of the policy is the business of a card.
 
     An edition to named declarations supersedes a general one; within one group the later
     date wins, then the greater amendment number. The contract shows another revision only
@@ -83,8 +59,8 @@ class Edition:
         self._peers: Final = peers
 
     def governs(self, shipment: Shipment) -> bool:
-        return self._concerns(shipment.declaration()) and self._wording.effective <= (
-            shipment.start()
+        return self._concerns(shipment.declaration()) and (
+            self._wording.amendment == 0 or self._wording.effective <= shipment.start()
         )
 
     def supersedes(self, other: Revision) -> bool:
