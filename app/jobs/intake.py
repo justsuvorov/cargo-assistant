@@ -1,9 +1,10 @@
+import hashlib
 from dataclasses import dataclass
 from typing import Final, Protocol, final
 
 from app.core.clock import Clock
 from app.jobs.database import Sessions
-from app.jobs.models import Declaration
+from app.jobs.models import Declaration, Job
 from app.jobs.queue import Jobs
 from app.storage.disk import Storage
 from app.storage.layout import Layout
@@ -21,7 +22,7 @@ class Receipt:
 class Reception(Protocol):
     """Place where an uploaded declaration file turns into a stored file and a queued job."""
 
-    async def receive(self, name: str, data: bytes, group: str) -> Receipt: ...
+    async def receive(self, name: str, data: bytes, group: str, uploader: str) -> Receipt: ...
 
 
 @final
@@ -39,7 +40,7 @@ class Intake:
         self._layout: Final = layout
         self._clock: Final = clock
 
-    async def receive(self, name: str, data: bytes, group: str) -> Receipt:
+    async def receive(self, name: str, data: bytes, group: str, uploader: str) -> Receipt:
         async with self._sessions.session() as session:
             declaration = Declaration(
                 access_group=group, file_name=name, created_at=self._clock.now()
@@ -53,6 +54,11 @@ class Intake:
                 declaration.job_id = await self._jobs.add(
                     session, "reconcile", {"declaration_id": declaration.id}
                 )
+                job = await session.get(Job, declaration.job_id)
+                if job is not None:
+                    job.uploaded_by = uploader
+                    job.access_group = group
+                    job.file_sha256 = hashlib.sha256(data).hexdigest()
                 await session.commit()
             except Exception:
                 self._storage.remove(key)

@@ -61,6 +61,8 @@ ignore = ["PT009", "RUF001", "RUF002", "RUF003"]
 "tests/**" = ["S101", "PLR2004", "S311", "FBT003"]
 "app/ingest/doc.py" = ["S603"]
 "tests/ingest/test_doc.py" = ["S603"]
+"tests/migrations/test_monitoring.py" = ["S608"]
+"migrations/monitoring.py" = ["S608"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 6

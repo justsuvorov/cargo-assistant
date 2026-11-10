@@ -15,6 +15,7 @@ from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
 from app.jobs.folios import Folios
+from app.jobs.logbook import Blank
 from app.jobs.models import Base, PolicyDocument
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
@@ -104,7 +105,7 @@ async def build(tmp_path: Path, files: tuple[Blob, ...], model: Model) -> tuple[
         storage, Folios(database, queue, Utc()), shelving, Given(model, []), Silent()
     )
     await Shift(
-        queue, pipelines, EnvSettings(Environment(str(tmp_path / ".env"))), Silent()
+        queue, pipelines, EnvSettings(Environment(str(tmp_path / ".env"))), Silent(), Blank()
     ).drain()
     return database, registered.policy_id, registered.job_id
 

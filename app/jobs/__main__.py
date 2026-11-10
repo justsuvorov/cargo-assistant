@@ -10,9 +10,12 @@ from app.core.settings import EnvSettings
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.gateway import Gateway, Tracked
+from app.jobs.logbook import Careful, Journaled, Local
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
+from app.jobs.retention import Monthly
 from app.jobs.stages import Building, Routed, Standard
+from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
 from app.llm.assembly import Configured
 from app.storage.disk import DiskStorage
@@ -48,7 +51,20 @@ async def run() -> None:
             journal,
         ),
     )
-    await Shift(queue, pipelines, settings, journal).serve(stop)
+    version = settings.version() or "dev"
+    logbook = Careful(
+        Journaled(
+            database,
+            Utc(),
+            Local(version),
+            Stamp(
+                version, Fingerprint(settings.cards()).hex(), settings.prompts(), settings.model()
+            ),
+            Monthly(database, Utc(), settings.months()),
+        ),
+        journal,
+    )
+    await Shift(queue, pipelines, settings, journal, logbook).serve(stop)
     await database.close()
     journal.info("Воркер остановлен", 0, 0)
 

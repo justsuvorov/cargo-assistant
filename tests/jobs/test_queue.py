@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from hamcrest import assert_that, equal_to
+from sqlalchemy import select
 
 from app.core.clock import Utc
 from app.jobs.database import Database
-from app.jobs.models import Base
+from app.jobs.models import Base, Job, JobRun
 from app.jobs.queue import Queue
 
 
@@ -174,4 +175,75 @@ def test_saves_stage_time_in_job(tmp_path: Path) -> None:
         sorted(asyncio.run(asyncio.wait_for(saves_stage_time_in_job(tmp_path), 30))),
         equal_to(["fields", "ingest"]),
         "Stage times are not kept together in the job",
+    )
+
+
+async def journal_after_finish(tmp_path: Path, *, fail: bool) -> tuple[str, bool, bool]:
+    database = await prepare(tmp_path)
+    clock = Moving()
+    queue = Queue(database, clock)
+    (job,) = await add(database, queue, 1)
+    await queue.claim(1)
+    clock.moment += timedelta(seconds=5)
+    if fail:
+        await queue.fail(job, "KeyError: x")
+    else:
+        await queue.finish(job)
+    async with database.session() as session:
+        row = await session.get(Job, job)
+        assert row is not None
+        found = (row.outcome, row.finished_at == clock.moment, row.queued_at == Moving().moment)
+    await database.close()
+    return found
+
+
+def test_records_success_and_finish_time_when_job_finishes(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(journal_after_finish(tmp_path, fail=False), 30)),
+        equal_to(("success", True, True)),
+        "Finished job does not keep its outcome, finish time and queue time",
+    )
+
+
+def test_records_error_and_finish_time_when_job_fails(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(journal_after_finish(tmp_path, fail=True), 30)),
+        equal_to(("error", True, True)),
+        "Failed job does not keep its outcome, finish time and queue time",
+    )
+
+
+async def attempt_after_revive(tmp_path: Path, attempts: int) -> tuple[str, str, str]:
+    database = await prepare(tmp_path)
+    clock = Moving()
+    queue = Queue(database, clock)
+    (job,) = await add(database, queue, 1)
+    await queue.claim(1)
+    async with database.session() as session:
+        session.add(JobRun(job_id=job, attempt=1, started_at=clock.moment))
+        await session.commit()
+    clock.moment += timedelta(seconds=100)
+    await queue.revive(50, attempts)
+    async with database.session() as session:
+        run = (await session.scalars(select(JobRun))).one()
+        row = await session.get(Job, job)
+        assert row is not None
+        found = (run.outcome, run.error_class, row.outcome)
+    await database.close()
+    return found
+
+
+def test_closes_open_attempt_as_requeued_when_job_is_revived(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(attempt_after_revive(tmp_path, 3), 30)),
+        equal_to(("requeued", "", "")),
+        "Revived job does not close its open attempt as requeued",
+    )
+
+
+def test_closes_open_attempt_as_error_when_attempts_are_exhausted(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(attempt_after_revive(tmp_path, 1), 30)),
+        equal_to(("error", "AttemptsExceeded", "error")),
+        "Exhausted job does not close its open attempt and session as errors",
     )

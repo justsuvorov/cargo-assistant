@@ -15,6 +15,7 @@ from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
 from app.jobs.folios import Folios
+from app.jobs.logbook import Blank
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.jobs.stages import Building
@@ -97,7 +98,7 @@ async def work(config: EnvSettings, model: Model) -> None:
         Given(model, []),
         Silent(),
     )
-    await asyncio.wait_for(Shift(queue, building, config, Silent()).drain(), 60)
+    await asyncio.wait_for(Shift(queue, building, config, Silent(), Blank()).drain(), 60)
     await database.close()
 
 

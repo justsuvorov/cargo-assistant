@@ -37,6 +37,12 @@ class Environment(BaseSettings):
     worker_poll_interval: float = 1.0
     worker_job_timeout: float = 600.0
     worker_max_attempts: int = 3
+    worker_beat_interval: float = 30.0
+    worker_purge_interval: float = 86400.0
+    journal_retention_months: PositiveInt = 3
+    app_version: str = ""
+    cards_dir: str = "cards"
+    prompts_version: str = ""
     keycloak_url: str = ""
     keycloak_realm: str = ""
     keycloak_client_id: str = ""

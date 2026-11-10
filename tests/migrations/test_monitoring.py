@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from alembic import command
 from alembic.config import Config
-from hamcrest import assert_that, contains_exactly, equal_to
+from hamcrest import assert_that, equal_to
 from sqlalchemy import make_url
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -62,7 +62,7 @@ async def query(url: str, statements: tuple[str, ...]) -> list[Mapping[str, obje
         found: list[Mapping[str, object]] = []
         for statement in statements:
             result = await connection.exec_driver_sql(statement)
-            found = list(result.mappings().all()) if result.returns_rows else []
+            found = [dict(row) for row in result.mappings()] if result.returns_rows else []
     await engine.dispose()
     return found
 
@@ -71,27 +71,28 @@ def sql(url: str, *statements: str) -> list[Mapping[str, object]]:
     return asyncio.run(asyncio.wait_for(query(url, statements), 30))
 
 
-def job(
-    number: int,
-    *,
-    kind: str = "reconcile",
-    status: str = "done",
-    outcome: str = "success",
-    created: float = 7200,
-    finished: str = "NULL",
-    queued: str = "NULL",
-    locked: str = "NULL",
-    sha: str = "",
-    user: str = "",
-    payload: str = "{}",
-    error: str = "",
-) -> str:
+def job(number: int, **fields: str | int) -> str:
+    v = {
+        "kind": "reconcile",
+        "status": "done",
+        "outcome": "success",
+        "created": 7200,
+        "finished": "NULL",
+        "queued": "NULL",
+        "locked": "NULL",
+        "sha": "",
+        "user": "",
+        "payload": "{}",
+        "error": "",
+        **fields,
+    }
     return (
         "INSERT INTO jobs (id, kind, payload, status, stage, progress, attempts, locked_at, error,"
         " timings, created_at, updated_at, queued_at, uploaded_by, access_group, file_sha256,"
-        f" outcome, finished_at) VALUES ({number}, '{kind}', '{payload}', '{status}', '', 0, 1,"
-        f" {locked}, '{error}', '{{}}', {ago(created)}, {ago(created)}, {queued}, '{user}', 'g',"
-        f" '{sha}', '{outcome}', {finished})"
+        f" outcome, finished_at) VALUES ({number}, '{v['kind']}', '{v['payload']}',"
+        f" '{v['status']}', '', 0, 1, {v['locked']}, '{v['error']}', '{{}}',"
+        f" {ago(float(v['created']))}, {ago(float(v['created']))}, {v['queued']}, '{v['user']}',"
+        f" 'g', '{v['sha']}', '{v['outcome']}', {v['finished']})"
     )
 
 
@@ -103,27 +104,26 @@ def worker(key: str, *, seen: float = 0, stopped: str = "NULL", running: int = 0
     )
 
 
-def attempt(
-    number: int,
-    of: int,
-    *,
-    worker_key: str = "NULL",
-    queued: str = "NULL",
-    started: float = 100,
-    finished: str = "NULL",
-    outcome: str = "success",
-    error_class: str = "",
-    error_text: str = "",
-    timings: str = "{}",
-    code: str = "c1",
-    profile: int = 0,
-) -> str:
+def attempt(number: int, of: int, **fields: str | int) -> str:
+    v = {
+        "worker_key": "NULL",
+        "queued": "NULL",
+        "started": 100,
+        "finished": "NULL",
+        "outcome": "success",
+        "error_class": "",
+        "error_text": "",
+        "timings": "{}",
+        "code": "c1",
+        "profile": 0,
+        **fields,
+    }
     return (
         "INSERT INTO job_runs (id, job_id, attempt, worker_id, queued_at, started_at, finished_at,"
         " outcome, error_class, error_text, timings, code_version, cards_version, profile_version,"
-        f" prompts_version, model) VALUES ({number}, {of}, 1, {worker_key}, {queued},"
-        f" {ago(started)}, {finished}, '{outcome}', '{error_class}', '{error_text}', '{timings}',"
-        f" '{code}', 'k1', {profile}, 'p1', 'm1')"
+        f" prompts_version, model) VALUES ({number}, {of}, 1, {v['worker_key']}, {v['queued']},"
+        f" {ago(float(v['started']))}, {v['finished']}, '{v['outcome']}', '{v['error_class']}',"
+        f" '{v['error_text']}', '{v['timings']}', '{v['code']}', 'k1', {v['profile']}, 'p1', 'm1')"
     )
 
 
@@ -399,11 +399,12 @@ def test_splits_attempts_by_versions() -> None:
         )
         rows = sql(
             url,
-            "SELECT code_version, profile_version, runs, success, failed FROM monitoring.v_versions ORDER BY 1",
+            "SELECT code_version, profile_version, runs, success, failed"
+            " FROM monitoring.v_versions ORDER BY 1",
         )
     assert_that(
         [tuple(row.values()) for row in rows],
-        contains_exactly(("a", 0, 2, 1, 1), ("b", 4, 1, 1, 0)),
+        equal_to([("a", 0, 2, 1, 1), ("b", 4, 1, 1, 0)]),
         "Version view does not split attempts by code and profile versions",
     )
 
@@ -436,7 +437,7 @@ def test_gives_one_row_per_alert_with_threshold_and_note() -> None:
     with scratch() as url:
         rows = sql(url, "SELECT * FROM monitoring.v_alerts ORDER BY alert")
     assert_that(
-        ([list(row.keys()) for row in rows][0], [row["alert"] for row in rows]),
+        (list(rows[0].keys()), [row["alert"] for row in rows]),
         equal_to(
             (
                 ["alert", "firing", "value", "threshold", "note"],
@@ -600,5 +601,5 @@ def test_exposes_no_error_text_file_name_or_field_value_in_any_view() -> None:
             },
         ),
         equal_to(([], set())),
-        "Views expose an error text, a file name or a field value",
+        "Views do not hide an error text, a file name and a field value",
     )

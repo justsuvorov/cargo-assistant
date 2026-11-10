@@ -12,6 +12,7 @@ from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.database import Database
 from app.jobs.folios import Folios
+from app.jobs.logbook import Blank
 from app.jobs.queue import Queue
 from app.jobs.stages import Standard
 from app.jobs.worker import Shift
@@ -75,7 +76,7 @@ async def work(config: EnvSettings) -> int:
     database = Database(config.database())
     queue = Queue(database, Utc())
     pipelines = Standard(Silent(), Folios(database, queue, Utc()), database)
-    count = await Shift(queue, pipelines, config, Silent()).drain()
+    count = await Shift(queue, pipelines, config, Silent(), Blank()).drain()
     await database.close()
     return count
 
