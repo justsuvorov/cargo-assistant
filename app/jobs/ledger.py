@@ -43,6 +43,7 @@ class Booked:
                     tokens_out=spent[1],
                     latency=call.outcome().latency(),
                     valid=call.outcome().valid(),
+                    outcome="success" if call.outcome().valid() else "invalid_json",
                 )
             )
             await session.commit()

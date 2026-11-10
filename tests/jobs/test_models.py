@@ -17,7 +17,9 @@ def test_declares_all_tables_of_the_data_model() -> None:
                 "jobs",
                 "eval_runs",
                 "llm_calls",
+                "worker_heartbeats",
+                "job_runs",
             }
         ),
-        "Data model does not declare the nine tables",
+        "Data model does not declare the eleven tables",
     )

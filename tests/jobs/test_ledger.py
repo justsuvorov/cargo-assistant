@@ -72,3 +72,26 @@ def test_raises_when_table_is_missing(tmp_path: Path) -> None:
         equal_to("OperationalError"),
         "Ledger does not raise when the write fails",
     )
+
+
+async def outcome_of_invalid_call(path: Path) -> tuple[str, bool]:
+    database = Database(f"sqlite+aiosqlite:///{path / 'o.db'}")
+    async with database.session() as session:
+        connection = await session.connection()
+        await connection.run_sync(Base.metadata.create_all)
+        await session.commit()
+    call = Logged("semantic", Route("vsk", "m"), "h", Measured((1, 1), 0.1, valid=False))
+    await asyncio.to_thread(Booked(database, asyncio.get_running_loop(), 1, 10.0).record, call)
+    async with database.session() as session:
+        row = (await session.scalars(select(LLMCall))).one()
+        found = (row.outcome, row.created_at is not None)
+    await database.close()
+    return found
+
+
+def test_books_invalid_answer_as_invalid_json_with_time(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(outcome_of_invalid_call(tmp_path), 30)),
+        equal_to(("invalid_json", True)),
+        "Call with an invalid answer is not booked as invalid json with its time",
+    )

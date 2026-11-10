@@ -21,7 +21,7 @@ async def upload(
         for file in files:
             name = safe(file.filename)
             receipt = await services(request).reception.receive(
-                name, await file.read(), who.group()
+                name, await file.read(), who.group(), who.name()
             )
             received.append((name, receipt))
     except (EscapeError, DeniedError) as error:

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
 from app.jobs.database import Sessions
-from app.jobs.models import Declaration, Job
+from app.jobs.models import Declaration, Job, JobRun
 
 
 @final
@@ -93,6 +93,7 @@ class Queue:
             payload=payload,
             created_at=self._clock.now(),
             updated_at=self._clock.now(),
+            queued_at=self._clock.now(),
         )
         session.add(job)
         await session.flush()
@@ -150,10 +151,18 @@ class Queue:
             await session.commit()
 
     async def finish(self, job_id: int) -> None:
-        await self._change(job_id, status="done", progress=100)
+        await self._change(
+            job_id,
+            status="done",
+            progress=100,
+            outcome="success",
+            finished_at=self._clock.now(),
+        )
 
     async def fail(self, job_id: int, error: str) -> None:
-        await self._change(job_id, status="failed", error=error)
+        await self._change(
+            job_id, status="failed", error=error, outcome="error", finished_at=self._clock.now()
+        )
 
     async def wait(self, job_id: int, reason: str) -> None:
         await self._change(job_id, status="waiting", error=reason, locked_at=None)
@@ -168,7 +177,13 @@ class Queue:
                         select(Declaration.job_id).where(Declaration.policy_id == policy_id)
                     ),
                 )
-                .values(status="queued", error="", attempts=0, updated_at=self._clock.now())
+                .values(
+                    status="queued",
+                    error="",
+                    attempts=0,
+                    updated_at=self._clock.now(),
+                    queued_at=self._clock.now(),
+                )
                 .returning(Job.id)
                 .execution_options(synchronize_session=False)
             )
@@ -181,21 +196,40 @@ class Queue:
             stuck = update(Job).where(Job.status == "running", Job.locked_at < limit)
             again = await session.execute(
                 stuck.where(Job.attempts < attempts)
-                .values(status="queued", locked_at=None, updated_at=self._clock.now())
+                .values(
+                    status="queued",
+                    locked_at=None,
+                    updated_at=self._clock.now(),
+                    queued_at=self._clock.now(),
+                )
                 .returning(Job.id)
                 .execution_options(synchronize_session=False)
             )
-            await session.execute(
+            exhausted = await session.execute(
                 stuck.where(Job.attempts >= attempts)
                 .values(
                     status="failed",
                     error="Превышено число попыток обработки задачи",
+                    outcome="error",
+                    finished_at=self._clock.now(),
                     updated_at=self._clock.now(),
                 )
+                .returning(Job.id)
                 .execution_options(synchronize_session=False)
             )
+            returned = list(again.scalars())
+            for ids, outcome, kind in (
+                (returned, "requeued", ""),
+                (list(exhausted.scalars()), "error", "AttemptsExceeded"),
+            ):
+                await session.execute(
+                    update(JobRun)
+                    .where(JobRun.job_id.in_(ids), JobRun.finished_at.is_(None))
+                    .values(finished_at=self._clock.now(), outcome=outcome, error_class=kind)
+                    .execution_options(synchronize_session=False)
+                )
             await session.commit()
-            return len(again.all())
+            return len(returned)
 
     async def _change(self, job_id: int, **values: object) -> None:
         async with self._sessions.session() as session:

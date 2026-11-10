@@ -19,6 +19,20 @@ class Settings(Protocol):
 
     def timeout(self) -> float: ...
 
+    def beat(self) -> float: ...
+
+    def purge(self) -> float: ...
+
+    def months(self) -> int: ...
+
+    def version(self) -> str: ...
+
+    def cards(self) -> Path: ...
+
+    def prompts(self) -> str: ...
+
+    def model(self) -> str: ...
+
     def development(self) -> bool: ...
 
     def issuer(self) -> str: ...
@@ -56,6 +70,30 @@ class EnvSettings:
 
     def timeout(self) -> float:
         return self._environment.worker_job_timeout
+
+    def beat(self) -> float:
+        return self._environment.worker_beat_interval
+
+    def purge(self) -> float:
+        return self._environment.worker_purge_interval
+
+    def months(self) -> int:
+        return self._environment.journal_retention_months
+
+    def version(self) -> str:
+        return self._environment.app_version
+
+    def cards(self) -> Path:
+        return Path(self._environment.cards_dir)
+
+    def prompts(self) -> str:
+        return self._environment.prompts_version
+
+    def model(self) -> str:
+        return {
+            "anthropic": self._environment.anthropic_model,
+            "gemini": self._environment.gemini_model,
+        }.get(self._environment.llm_provider, self._environment.llm_model)
 
     def development(self) -> bool:
         return self._environment.auth_dev_mode
