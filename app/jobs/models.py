@@ -1,7 +1,11 @@
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+def utc() -> datetime:
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Base(DeclarativeBase):
@@ -66,6 +70,12 @@ class Job(Base):
     timings: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime)
     updated_at: Mapped[datetime] = mapped_column(DateTime)
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    uploaded_by: Mapped[str] = mapped_column(String(128), default="")
+    access_group: Mapped[str] = mapped_column(String(128), default="")
+    file_sha256: Mapped[str] = mapped_column(String(64), default="", index=True)
+    outcome: Mapped[str] = mapped_column(String(16), default="")
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class Declaration(Base):
@@ -85,6 +95,8 @@ class Declaration(Base):
     month: Mapped[str] = mapped_column(String(7), default="", index=True)
     result_key: Mapped[str] = mapped_column(String(512), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime)
+    places_expected: Mapped[int] = mapped_column(Integer, default=0)
+    places_answered: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CheckResult(Base):
@@ -102,6 +114,7 @@ class CheckResult(Base):
     comment: Mapped[str] = mapped_column(Text, default="")
     source: Mapped[str] = mapped_column(String(8))
     correction: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=utc)
 
 
 class RuleSet(Base):
@@ -145,3 +158,48 @@ class LLMCall(Base):
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     latency: Mapped[float] = mapped_column(Float, default=0.0)
     valid: Mapped[bool] = mapped_column(default=True)
+    outcome: Mapped[str] = mapped_column(String(16), default="success")
+    subject: Mapped[str] = mapped_column(String(128), default="")
+    questions: Mapped[int] = mapped_column(Integer, default=0)
+    dropped: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=utc)
+
+
+class WorkerHeartbeat(Base):
+    """Worker process with the moment it started, its last signal and how many jobs it runs."""
+
+    __tablename__ = "worker_heartbeats"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    host: Mapped[str] = mapped_column(String(128))
+    pid: Mapped[int] = mapped_column(Integer)
+    version: Mapped[str] = mapped_column(String(64), default="")
+    started_at: Mapped[datetime] = mapped_column(DateTime)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, index=True)
+    running: Mapped[int] = mapped_column(Integer, default=0)
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class JobRun(Base):
+    """One attempt to run a job on a worker, with its outcome, stage times and versions."""
+
+    __tablename__ = "job_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey("jobs.id"), index=True)
+    attempt: Mapped[int] = mapped_column(Integer, default=1)
+    worker_id: Mapped[str | None] = mapped_column(
+        ForeignKey("worker_heartbeats.id"), nullable=True, index=True
+    )
+    queued_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime, index=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    outcome: Mapped[str] = mapped_column(String(16), default="running")
+    error_class: Mapped[str] = mapped_column(String(128), default="")
+    error_text: Mapped[str] = mapped_column(Text, default="")
+    timings: Mapped[dict[str, float]] = mapped_column(JSON, default=dict)
+    code_version: Mapped[str] = mapped_column(String(64), default="")
+    cards_version: Mapped[str] = mapped_column(String(64), default="")
+    profile_version: Mapped[int] = mapped_column(Integer, default=0)
+    prompts_version: Mapped[str] = mapped_column(String(64), default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
