@@ -61,6 +61,16 @@ data/real/      реальные документы клиента (в .gitignor
 .venv/Scripts/python -m tools.lint
 ```
 
+Тесты на Postgres (маркер `postgres`; без `TEST_DATABASE_URL` пропускаются) и тест с настоящим
+LibreOffice (маркер `soffice`, по запросу):
+
+```
+docker compose -f docker-compose.test.yml up -d --wait
+TEST_DATABASE_URL=postgresql+asyncpg://cargo:cargo@127.0.0.1:55432/cargo_test .venv/Scripts/python -m pytest -q
+.venv/Scripts/python -m pytest -q -m soffice
+docker compose -f docker-compose.test.yml down
+```
+
 ## Неприкосновенные правила
 
 Нарушение — основание вернуть задачу.
