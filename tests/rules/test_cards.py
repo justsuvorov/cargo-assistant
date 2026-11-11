@@ -11,7 +11,7 @@ from app.domain.policy import Policy, Vacant
 from app.domain.status import Match
 from app.rules.cards import Cards
 from app.rules.errors import CardError
-from tests.rules.fakes import Doubtful, Mute, Oracle, Paper, Profile, Text
+from tests.rules.fakes import Doubtful, Mute, Oracle, Paper, Profile, Text, Unsettled
 
 
 def _folder() -> Path:
@@ -368,4 +368,48 @@ def test_card_asks_a_person_when_the_policy_cannot_choose_a_revision() -> None:
         ),
         equal_to(("clause.unsettled",)),
         "Card does not ask a person when the policy cannot choose a revision",
+    )
+
+
+def test_vertical_period_ending_before_its_start_is_a_mismatch_without_a_profile() -> None:
+    card = next(
+        card for card in Cards(_folder(), Mute()).cards("vertical") if card.field() == "period"
+    )
+    verdict = card.verdicts(
+        Paper("24", "vertical", ({"period": ("с 12.09.2026 по 12.08.2026",)},)), Vacant("1")
+    )[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code(), verdict.remark().comment()),
+        equal_to(("mismatch", "period.end_before_start", "Дата окончания раньше даты начала")),
+        "Cards does not reject a vertical period ending before its start without a profile",
+    )
+
+
+def test_table_end_before_the_row_start_is_a_mismatch_when_the_term_is_unsettled() -> None:
+    row = {
+        **_row("Paper", "Road", ""),
+        "period_start": ("12.09.2026",),
+        "period_end": ("12.08.2026",),
+    }
+    card = next(
+        card for card in Cards(_folder(), Mute()).cards("psg") if card.field() == "period_end"
+    )
+    verdict = card.verdicts(Paper("25", "psg", (row,)), Unsettled("term", "две редакции"))[0]
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("mismatch", "period_end.end_before_start")),
+        "Cards does not reject a table end before the row start when the term is unsettled",
+    )
+
+
+def test_date_range_with_an_end_without_its_order_status_fails_loudly(tmp_path: Path) -> None:
+    folder = _card(
+        tmp_path,
+        "period",
+        {"clause": "term", "check": "date_range", "params": "{bounds: [start, end]}"},
+    )
+    assert_that(
+        lambda: Cards(folder, Mute()).cards("vertical"),
+        raises(CardError, "end_before_start"),
+        "Cards does not reject a date range with an end but without the status of disorder",
     )

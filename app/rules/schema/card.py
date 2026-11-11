@@ -21,7 +21,7 @@ from app.rules.modes import Conveyance, Modes
 from app.rules.probe import Accepted, Constant, Doubted, Emptied, Grounded, Probe
 from app.rules.rows import Rowwise
 from app.rules.semantic import Asking
-from app.rules.window import Window
+from app.rules.window import Ordered, Window
 from app.rules.wording import PLACEHOLDERS, Comments
 
 type _Check = Literal[
@@ -59,6 +59,7 @@ class Params(BaseModel):
     synonyms: dict[str, str] = Attribute(default_factory=dict)
     bounds: tuple[Literal["start", "end"], ...] = ()
     extension: str = ""
+    end_before_start: Literal["", "match", "mismatch", "review"] = ""
     foreign_currency: _Status = "review"
     modes: dict[str, tuple[str, ...]] = Attribute(default_factory=dict)
     exclusions: str = ""
@@ -124,6 +125,10 @@ class Spec(BaseModel):
     def _parametrised(self) -> "Spec":
         problems = (
             ("date_range требует bounds", self.check == "date_range" and not self.params.bounds),
+            (
+                "date_range с end в bounds требует end_before_start",
+                "end" in self.params.bounds and not self.params.end_before_start,
+            ),
             (
                 "conditional требует when и else",
                 self.check == "conditional" and not (self.params.when and self.params.otherwise),
@@ -196,7 +201,9 @@ class Spec(BaseModel):
         cores: Mapping[str, Callable[[], Probe]] = {
             "exact": lambda: Grounded(self.clause, Exact(params.parts, params.ignore)),
             "fuzzy": lambda: Grounded(self.clause, Fuzzy(params.synonyms)),
-            "date_range": lambda: Grounded(self.clause, Window(params.bounds, params.extension)),
+            "date_range": lambda: self._ordered(
+                Grounded(self.clause, Window(params.bounds, params.extension))
+            ),
             "lte_limit": lambda: Grounded(self.clause, Ceiling(_STATUSES[params.foreign_currency])),
             "in_list": lambda: Grounded(
                 self.clause,
@@ -214,6 +221,11 @@ class Spec(BaseModel):
             ),
         }
         return cores[check]()
+
+    def _ordered(self, probe: Probe) -> Probe:
+        if not self.params.end_before_start:
+            return probe
+        return Ordered(self.params.bounds, _STATUSES[self.params.end_before_start], probe)
 
 
 def spec(path: Path) -> Spec:

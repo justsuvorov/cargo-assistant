@@ -82,6 +82,25 @@ class Doubtful:
         return ()
 
 
+class Unsettled:
+    """Policy that cannot choose a revision of one clause and has no other clauses."""
+
+    def __init__(self, key: str, reason: str) -> None:
+        self._key = key
+        self._reason = reason
+
+    def number(self) -> str:
+        return "0000"
+
+    def clause(self, key: str, _shipment: Shipment) -> Clause:
+        if key == self._key:
+            raise UnreadableError(self._reason)
+        return Absent(key)
+
+    def conditions(self) -> tuple[str, ...]:
+        return ()
+
+
 class Paper:
     """Declaration of a form whose rows are cell texts per field key, read by the parser."""
 

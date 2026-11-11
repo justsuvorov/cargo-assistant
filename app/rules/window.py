@@ -7,16 +7,45 @@ from app.domain.errors import UnreadableError
 from app.domain.field import Field
 from app.domain.policy import Policy
 from app.domain.shipment import Shipment
-from app.domain.status import Match, Mismatch, Review
+from app.domain.status import Match, Mismatch, Review, Status
 from app.rules.outcome import Finding, Outcome
 from app.rules.presence import Stated
+from app.rules.probe import Probe
+
+
+@final
+class Ordered:
+    """Probe that finds the end of the dates of a field, named by the bounds of the card,
+    before their start without any policy clause and gives the status of the card for it; dates
+    in order and dates that cannot be read go to the inner probe.
+
+    A field without its own start, such as the end of a table row, takes the start of the
+    shipment.
+    """
+
+    __slots__ = ("_bounds", "_probe", "_status")
+
+    def __init__(self, bounds: tuple[str, ...], status: Status, probe: Probe) -> None:
+        self._bounds: Final = bounds
+        self._status: Final = status
+        self._probe: Final = probe
+
+    def outcome(self, field: Field, shipment: Shipment, policy: Policy) -> Outcome:
+        stated = dict(zip(self._bounds, field.dates(), strict=False))
+        try:
+            days = {"start": stated["start"] if "start" in stated else shipment.start(), **stated}
+        except UnreadableError:
+            return self._probe.outcome(field, shipment, policy)
+        if days.get("end", days["start"]) < days["start"]:
+            return Finding(self._status, "end_before_start", {"entry": field.text()})
+        return self._probe.outcome(field, shipment, policy)
 
 
 @final
 class Window:
     """Measure that the dates of a field, named by the bounds start and end of the card, lie
     within the term of the clause; the end may pass the term when the profile states the
-    extension clause, and an end before the start needs a person.
+    extension clause. The order of the dates is the business of Ordered before the clause.
 
     A field without its own start, such as the end of a table row, takes the start of the
     shipment.
@@ -67,8 +96,6 @@ class Window:
     ) -> tuple[Outcome, ...]:
         if "end" not in days:
             return ()
-        if days["end"] < days["start"]:
-            return (Finding(Review(), "end_before_start", values),)
         if days["end"] > term[1] and self._extended(shipment, policy):
             return (Finding(Match(), "extended", values),)
         return self._outside(days["end"], term, values)
