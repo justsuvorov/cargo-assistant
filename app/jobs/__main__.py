@@ -7,13 +7,14 @@ from app.core.clock import Utc
 from app.core.journal import LogJournal
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
+from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.gateway import Gateway, Tracked
 from app.jobs.logbook import Careful, Journaled, Local
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
-from app.jobs.retention import Monthly
+from app.jobs.retention import Both, Cached, Monthly
 from app.jobs.stages import Building, Routed, Standard
 from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
@@ -44,7 +45,7 @@ async def run() -> None:
     pipelines = Routed(
         Standard(journal, folio, database),
         Building(
-            DiskStorage(settings.storage()),
+            Workbench(DiskStorage(settings.storage()), settings.soffice()),
             folio,
             Shelving(database, queue, DiskStorage(settings.storage()), Keys()),
             gateway,
@@ -60,7 +61,10 @@ async def run() -> None:
             Stamp(
                 version, Fingerprint(settings.cards()).hex(), settings.prompts(), settings.model()
             ),
-            Monthly(database, Utc(), settings.months()),
+            Both(
+                Monthly(database, Utc(), settings.months()),
+                Cached(settings.soffice(), Utc(), settings.cache_days()),
+            ),
         ),
         journal,
     )

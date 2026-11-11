@@ -6,6 +6,7 @@ from sqlalchemy import select
 
 from app.core.journal import Journal
 from app.jobs.building import (
+    Bench,
     Converting,
     Extracting,
     Fetching,
@@ -21,7 +22,6 @@ from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot
 from app.policy.package import Package
 from app.policy.schema.profile import Profile
-from app.storage.disk import Storage
 from app.storage.layout import Keys
 
 
@@ -115,12 +115,12 @@ class Standard:
 class Building:
     """Pipeline of a policy package: fetch, convert, read, extract with the model, save."""
 
-    __slots__ = ("_folio", "_journal", "_models", "_packages", "_storage")
+    __slots__ = ("_bench", "_folio", "_journal", "_models", "_packages")
 
     def __init__(
-        self, storage: Storage, folio: Folio, packages: Packages, models: Models, journal: Journal
+        self, bench: Bench, folio: Folio, packages: Packages, models: Models, journal: Journal
     ) -> None:
-        self._storage: Final = storage
+        self._bench: Final = bench
         self._folio: Final = folio
         self._packages: Final = packages
         self._models: Final = models
@@ -133,8 +133,8 @@ class Building:
         package: Shelf[Package] = Shelf()
         profile: Shelf[Profile] = Shelf()
         return (
-            Fetching(self._storage, Keys(), folder),
-            Converting(folder, self._journal),
+            Fetching(self._bench, Keys(), folder),
+            Converting(self._bench, folder, self._journal),
             Reading(folder, package, self._journal),
             Extracting(self._models, package, profile),
             Saving(self._folio, self._packages, package, profile, self._journal),

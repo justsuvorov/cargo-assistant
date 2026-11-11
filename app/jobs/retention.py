@@ -1,10 +1,13 @@
+import asyncio
 import calendar
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Final, Protocol, final
 
 from sqlalchemy import delete, func, select
 
 from app.core.clock import Clock
+from app.ingest.doc import Conversions
 from app.jobs.database import Sessions
 from app.jobs.models import JobRun, LLMCall, WorkerHeartbeat
 
@@ -13,6 +16,37 @@ class Retention(Protocol):
     """Deletion of journal rows that outlived their storage period."""
 
     async def purge(self) -> int: ...
+
+
+@final
+class Both:
+    """Retention that runs two retentions one after another and adds up what they removed."""
+
+    __slots__ = ("_first", "_second")
+
+    def __init__(self, first: Retention, second: Retention) -> None:
+        self._first: Final = first
+        self._second: Final = second
+
+    async def purge(self) -> int:
+        return await self._first.purge() + await self._second.purge()
+
+
+@final
+class Cached:
+    """Retention of the files that conversion of documents leaves in its home folder: a
+    file changed earlier than the given number of days ago is removed with the idle profiles."""
+
+    __slots__ = ("_clock", "_days", "_home")
+
+    def __init__(self, home: Path, clock: Clock, days: int) -> None:
+        self._home: Final = home
+        self._clock: Final = clock
+        self._days: Final = days
+
+    async def purge(self) -> int:
+        edge = (self._clock.now() - timedelta(days=self._days)).replace(tzinfo=UTC).timestamp()
+        return await asyncio.to_thread(Conversions(self._home).sweep, edge)
 
 
 @final

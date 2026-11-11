@@ -117,13 +117,17 @@ async def policies(request: Request, who: Annotated[Identity, Depends(identity)]
     return templates.TemplateResponse(
         request,
         "policies.html",
-        {"page": "policies", "policies": [item for item in found if who.sees(item.access_group)]},
+        {
+            "page": "policies",
+            "expert": who.allows("expert"),
+            "policies": [item for item in found if who.sees(item.access_group)],
+        },
     )
 
 
 @router.post("/policies/upload")
 async def upload(
-    request: Request, files: list[UploadFile], who: Annotated[Identity, Depends(identity)]
+    request: Request, files: list[UploadFile], who: Annotated[Identity, Depends(expert)]
 ) -> RedirectResponse:
     try:
         group = who.group()

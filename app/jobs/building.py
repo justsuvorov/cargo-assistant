@@ -55,14 +55,49 @@ class Shelf[T]:
         return self._items[-1]
 
 
+class Bench(Protocol):
+    """Place where a package is unpacked and its doc files are converted, kept in one folder."""
+
+    def unpack(self, prefix: str) -> Path: ...
+
+    def warm(self, path: Path) -> None: ...
+
+
+@final
+class Workbench:
+    """Bench in a folder of the service, never in the system temporary folder, so the texts of
+    the customer are kept in one place that is cleaned on a schedule."""
+
+    __slots__ = ("_home", "_storage")
+
+    def __init__(self, storage: Storage, home: Path) -> None:
+        self._storage: Final = storage
+        self._home: Final = home
+
+    def unpack(self, prefix: str) -> Path:
+        work = self._home / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix="package-", dir=work))
+        try:
+            self._storage.export(prefix, folder)
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return folder
+
+    def warm(self, path: Path) -> None:
+        with suppress(UnreadableError):
+            Doc(path, "soffice", self._home).warm()
+
+
 @final
 class Fetching:
     """Stage that copies the files of the package from the storage to a working folder."""
 
-    __slots__ = ("_folder", "_layout", "_storage")
+    __slots__ = ("_bench", "_folder", "_layout")
 
-    def __init__(self, storage: Storage, layout: Layout, folder: Cell[Path]) -> None:
-        self._storage: Final = storage
+    def __init__(self, bench: Bench, layout: Layout, folder: Cell[Path]) -> None:
+        self._bench: Final = bench
         self._layout: Final = layout
         self._folder: Final = folder
 
@@ -70,17 +105,11 @@ class Fetching:
         return "fetch"
 
     async def run(self, job: Snapshot) -> None:
-        folder = Path(tempfile.mkdtemp(prefix="package-"))
-        self._folder.put(folder)
-        try:
+        self._folder.put(
             await asyncio.to_thread(
-                self._storage.export,
-                self._layout.package(int(str(job.payload["policy_id"]))),
-                folder,
+                self._bench.unpack, self._layout.package(int(str(job.payload["policy_id"])))
             )
-        except BaseException:
-            shutil.rmtree(folder, ignore_errors=True)
-            raise
+        )
 
 
 @final
@@ -90,9 +119,10 @@ class Converting:
     A file that cannot be converted is not an error here: reading names it in the problems.
     """
 
-    __slots__ = ("_folder", "_journal")
+    __slots__ = ("_bench", "_folder", "_journal")
 
-    def __init__(self, folder: Cell[Path], journal: Journal) -> None:
+    def __init__(self, bench: Bench, folder: Cell[Path], journal: Journal) -> None:
+        self._bench: Final = bench
         self._folder: Final = folder
         self._journal: Final = journal
 
@@ -106,11 +136,7 @@ class Converting:
     def _convert(self, folder: Path) -> int:
         files = sorted(path for path in folder.rglob("*") if path.suffix.lower() == ".doc")
         with ThreadPoolExecutor(_CONVERSIONS) as pool:
-            return len(list(pool.map(self._warm, files)))
-
-    def _warm(self, path: Path) -> None:
-        with suppress(UnreadableError):
-            Doc(path).warm()
+            return len(list(pool.map(self._bench.warm, files)))
 
 
 @final

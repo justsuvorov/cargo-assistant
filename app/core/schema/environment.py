@@ -9,6 +9,8 @@ class Environment(BaseSettings):
 
     database_url: str = "sqlite+aiosqlite:///./cargo.db"
     storage_dir: str = "./storage"
+    soffice_dir: str = ""
+    soffice_cache_days: PositiveInt = 7
     llm_provider: str = "vsk"
     llm_allow_external: bool = False
     llm_api_url: str = ""

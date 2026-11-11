@@ -11,6 +11,10 @@ class Settings(Protocol):
 
     def storage(self) -> Path: ...
 
+    def soffice(self) -> Path: ...
+
+    def cache_days(self) -> int: ...
+
     def jobs(self) -> int: ...
 
     def attempts(self) -> int: ...
@@ -58,6 +62,12 @@ class EnvSettings:
 
     def storage(self) -> Path:
         return Path(self._environment.storage_dir)
+
+    def soffice(self) -> Path:
+        return Path(self._environment.soffice_dir or self.storage() / "soffice")
+
+    def cache_days(self) -> int:
+        return self._environment.soffice_cache_days
 
     def jobs(self) -> int:
         return self._environment.worker_max_jobs
