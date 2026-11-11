@@ -13,6 +13,7 @@ from sqlalchemy import select
 from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
+from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
@@ -102,7 +103,11 @@ async def build(tmp_path: Path, files: tuple[Blob, ...], model: Model) -> tuple[
     registered = await shelving.receive(Tree(files).files(), "g")
     (tmp_path / ".env").write_text("WORKER_JOB_TIMEOUT=60\n", encoding="utf-8")
     pipelines = Building(
-        storage, Folios(database, queue, Utc()), shelving, Given(model, []), Silent()
+        Workbench(storage, tmp_path / "soffice"),
+        Folios(database, queue, Utc()),
+        shelving,
+        Given(model, []),
+        Silent(),
     )
     await Shift(
         queue, pipelines, EnvSettings(Environment(str(tmp_path / ".env"))), Silent(), Blank()
@@ -234,4 +239,20 @@ def test_keeps_archive_folders_in_the_stored_package() -> None:
         names,
         equal_to(["ГП.docx", "ДС/ДС 2/файл.docx"]),
         "Archive folders are not kept in the stored package",
+    )
+
+
+async def works_inside_the_home_folder(tmp_path: Path) -> tuple[bool, list[str]]:
+    answers = {"profile.policy": json.dumps({"passages": []})}
+    database, _, _ = await build(tmp_path, package("77")[:1], FakeModel(answers))
+    await database.close()
+    work = tmp_path / "soffice" / "work"
+    return work.is_dir(), [path.name for path in work.iterdir()]
+
+
+def test_unpacks_the_package_inside_the_home_folder_and_removes_it(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(works_inside_the_home_folder(tmp_path), 60)),
+        equal_to((True, [])),
+        "Build does not unpack the package inside the home folder or does not remove it",
     )

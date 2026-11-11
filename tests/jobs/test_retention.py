@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta
+import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from hamcrest import assert_that, equal_to
@@ -15,7 +16,7 @@ from app.jobs.models import (
     LLMCall,
     WorkerHeartbeat,
 )
-from app.jobs.retention import Monthly
+from app.jobs.retention import Both, Cached, Monthly
 
 
 class Fixed:
@@ -108,4 +109,38 @@ def test_clamps_the_day_when_the_month_is_shorter(tmp_path: Path) -> None:
         found,
         equal_to((3, 1, 1, 1, 3)),
         "Purge on the thirty first does not cut at the end of February",
+    )
+
+
+class Counted:
+    """Test double named counted."""
+
+    def __init__(self, number: int) -> None:
+        self._number = number
+
+    async def purge(self) -> int:
+        return self._number
+
+
+def test_adds_up_what_both_retentions_removed() -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(Both(Counted(2), Counted(5)).purge(), 5)),
+        equal_to(7),
+        "Both retentions do not add up the removed rows",
+    )
+
+
+def test_removes_converted_files_older_than_the_days_and_keeps_the_rest(tmp_path: Path) -> None:
+    now = datetime(2026, 11, 10, 12, 0)
+    edge = (now - timedelta(days=7)).replace(tzinfo=UTC).timestamp()
+    cache = tmp_path / "cache"
+    cache.mkdir()
+    for name, moment in (("old", edge - 1), ("edge", edge), ("new", edge + 1)):
+        (cache / name).write_bytes(b"x")
+        os.utime(cache / name, (moment, moment))
+    removed = asyncio.run(asyncio.wait_for(Cached(tmp_path, Fixed(now), 7).purge(), 5))
+    assert_that(
+        (removed, sorted(path.name for path in cache.iterdir())),
+        equal_to((1, ["edge", "new"])),
+        "Cache is not cut exactly at the number of days",
     )

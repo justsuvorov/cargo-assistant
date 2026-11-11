@@ -6,16 +6,19 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from hamcrest import assert_that, equal_to
+from openpyxl import Workbook
 
 from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
+from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
 from app.jobs.queue import Queue
 from app.jobs.stages import Standard
 from app.jobs.worker import Shift
+from app.storage.disk import DiskStorage
 from app.web.application import create_app
 
 
@@ -72,10 +75,31 @@ def test_reports_queued_status_right_after_upload(tmp_path: Path) -> None:
     )
 
 
+def declaration(folder: Path) -> bytes:
+    book = Workbook()
+    sheet = book.create_sheet("Декларация")
+    for row, cells in (
+        (1, {5: "Приложение № 2 к Генеральному Полису"}),
+        (2, {7: "№ 0000T00GR0000 от 26.08.2026 г."}),
+        (8, {0: "Декларация", 3: "№ Р-005", 4: "об отгрузке"}),
+        (16, {1: "1.", 2: "Полное наименование груза", 6: "мясо, сыр"}),
+        (20, {1: "4.", 2: "Страховая сумма", 6: "1000", 8: "рублей"}),
+        (21, {1: "5.", 2: "Транспорт", 6: "Авто"}),
+        (22, {1: "6.", 2: "Пункт отправления", 6: "г. Первый"}),
+        (24, {1: "8.", 2: "Пункт назначения", 6: "г. Второй"}),
+        (25, {1: "9.", 2: "Период страхования", 6: "21.09.2026", 7: "по", 8: "30.12.2026"}),
+    ):
+        for column, value in cells.items():
+            sheet.cell(row=row, column=column + 1, value=value)
+    book.save(folder / "d.xlsx")
+    return (folder / "d.xlsx").read_bytes()
+
+
 async def work(config: EnvSettings) -> int:
     database = Database(config.database())
     queue = Queue(database, Utc())
-    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database)
+    bench = Workbench(DiskStorage(config.storage()), config.soffice())
+    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database, bench, config.cards())
     count = await Shift(queue, pipelines, config, Silent(), Blank()).drain()
     await database.close()
     return count
@@ -84,7 +108,7 @@ async def work(config: EnvSettings) -> int:
 def test_reports_done_status_after_worker_ran(tmp_path: Path) -> None:
     config = settings(tmp_path)
     with TestClient(create_app(config)) as client:
-        client.post("/api/declarations", files=[("files", ("a.xlsx", b"x"))])
+        client.post("/api/declarations", files=[("files", ("a.xlsx", declaration(tmp_path)))])
         asyncio.run(asyncio.wait_for(work(config), 30))
         response = client.get("/api/jobs/1")
     assert_that(

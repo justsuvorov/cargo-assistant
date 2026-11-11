@@ -1,4 +1,5 @@
 import random
+import sqlite3
 from pathlib import Path
 
 from alembic import command
@@ -76,4 +77,32 @@ def test_filters_archive_by_month(tmp_path: Path) -> None:
         "a.xlsx" in html,
         equal_to(False),
         "Archive filter does not drop declarations of another month",
+    )
+
+
+def test_shows_why_the_declaration_has_no_policy_on_the_job_and_archive_pages(
+    tmp_path: Path,
+) -> None:
+    with TestClient(create_app(settings(tmp_path))) as client:
+        client.post("/reconcile/upload", files=[("files", ("a.xlsx", b"x"))])
+        with sqlite3.connect(tmp_path / "web.db") as connection:
+            connection.execute("UPDATE declarations SET binding = 'policy_unknown'")
+        pages = (client.get("/jobs/1/status").text, client.get("/archive").text)
+    assert_that(
+        ["не найден среди полисов вашей группы" in page for page in pages],
+        equal_to([True, True]),
+        "Pages do not show why the declaration is not bound to a policy",
+    )
+
+
+def test_does_not_show_a_reason_for_a_bound_declaration(tmp_path: Path) -> None:
+    with TestClient(create_app(settings(tmp_path))) as client:
+        client.post("/reconcile/upload", files=[("files", ("a.xlsx", b"x"))])
+        with sqlite3.connect(tmp_path / "web.db") as connection:
+            connection.execute("UPDATE declarations SET binding = 'bound'")
+        html = client.get("/jobs/1/status").text
+    assert_that(
+        "binding" in html,
+        equal_to(False),
+        "Page does not stay free of reasons for a declaration that is bound to a policy",
     )

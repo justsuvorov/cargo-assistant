@@ -16,7 +16,7 @@
   {% for row in rows %}
   <tr>
     <td>{{ row.declaration.file_name }}</td>
-    <td>{% with job = row.job %}{% include "job.html" %}{% endwith %}</td>
+    <td>{% with job = row.job, note = row.declaration.binding %}{% include "job.html" %}{% endwith %}</td>
   </tr>
   {% endfor %}
   </tbody>

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Полисы</h1>
+{% if expert %}
 <form method="post" action="/policies/upload" enctype="multipart/form-data" class="upload">
   <p>Загрузите пакет полиса: архив zip или папку. Файлы ГП лежат в папке полиса (или в подпапке «ГП»),
      все дополнительные соглашения — в папке «ДС».</p>
@@ -8,6 +9,7 @@
   <p><label>Папка целиком: <input type="file" name="files" webkitdirectory multiple></label></p>
   <button type="submit">Загрузить пакет и собрать профиль</button>
 </form>
+{% endif %}
 <h2>Загруженные полисы</h2>
 {% if policies %}
 <table>

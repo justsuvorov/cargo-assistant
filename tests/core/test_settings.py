@@ -48,6 +48,37 @@ def test_gives_journal_defaults_of_thirty_seconds_a_day_and_three_months(tmp_pat
     )
 
 
+def test_keeps_libreoffice_folder_inside_storage_by_default(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text(f"STORAGE_DIR={tmp_path / 'files'}\n", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).soffice(),
+        equal_to(tmp_path / "files" / "soffice"),
+        "LibreOffice folder is not inside the storage by default",
+    )
+
+
+def test_takes_libreoffice_folder_and_cache_days_from_environment(tmp_path: Path) -> None:
+    days = random.randint(2, 30)
+    (tmp_path / ".env").write_text(
+        f"SOFFICE_DIR={tmp_path / 'lo'}\nSOFFICE_CACHE_DAYS={days}\n", encoding="utf-8"
+    )
+    settings = EnvSettings(Environment(str(tmp_path / ".env")))
+    assert_that(
+        (settings.soffice(), settings.cache_days()),
+        equal_to((tmp_path / "lo", days)),
+        "LibreOffice folder and cache days are not taken from the environment",
+    )
+
+
+def test_keeps_converted_files_for_seven_days_by_default(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).cache_days(),
+        equal_to(7),
+        "Converted files are not kept for seven days by default",
+    )
+
+
 def test_names_the_model_of_the_chosen_provider(tmp_path: Path) -> None:
     name = f"model{random.randint(1, 999)}"
     (tmp_path / ".env").write_text(

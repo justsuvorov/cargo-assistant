@@ -4,9 +4,11 @@ import random
 import shutil
 import string
 import subprocess
+import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import suppress
 from pathlib import Path
 
 import pytest
@@ -15,7 +17,7 @@ from hamcrest import assert_that, contains_string, equal_to, raises
 
 from app.domain.errors import UnreadableError
 from app.ingest.book import Sheet
-from app.ingest.doc import Doc, Profiles
+from app.ingest.doc import Conversions, Doc, Profiles
 
 
 def text(sheets: tuple[Sheet, ...]) -> str:
@@ -166,3 +168,116 @@ def test_refuses_file_that_is_not_a_word_document(tmp_path: Path) -> None:
         raises(UnreadableError, "не является документом Word"),
         "Doc does not refuse a file that is not a Word document",
     )
+
+
+def fake_soffice(folder: Path, code: int, marker: str) -> str:
+    lines = [
+        "import pathlib, sys",
+        "from docx import Document",
+        "args = sys.argv[1:]",
+        "out = pathlib.Path(args[args.index('--outdir') + 1])",
+        "pathlib.Path(__file__).with_name('calls').open('a').write(str(out) + chr(10))",
+        "source = pathlib.Path(args[-1])",
+        f"if {code} == 0:",
+        "    document = Document()",
+        f"    document.add_paragraph({marker!r})",
+        "    document.save(str(out / (source.stem + '.docx')))",
+        f"sys.exit({code})",
+    ]
+    script = folder / "fake.py"
+    script.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if sys.platform == "win32":
+        launcher = folder / "fake.cmd"
+        launcher.write_text(f'@"{sys.executable}" "{script}" %*\n', encoding="utf-8")
+    else:
+        launcher = folder / "fake.sh"
+        launcher.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n')
+        launcher.chmod(0o755)
+    return str(launcher)
+
+
+def source_doc(folder: Path) -> Path:
+    path = folder / "a.doc"
+    path.write_bytes(bytes.fromhex("D0CF11E0A1B11AE1") + random.randbytes(32))
+    return path
+
+
+def test_leaves_no_files_after_failed_conversion(tmp_path: Path) -> None:
+    with suppress(UnreadableError):
+        Doc(source_doc(tmp_path), fake_soffice(tmp_path, 1, "x"), tmp_path / "home").sheets()
+    assert_that(
+        [path.name for path in (tmp_path / "home").rglob("*") if path.suffix in {".part", ".docx"}]
+        + [path.name for path in (tmp_path / "home" / "work").iterdir()],
+        equal_to([]),
+        "Doc does not remove the temporary files of a failed conversion",
+    )
+
+
+def test_converts_in_the_work_folder_of_the_home(tmp_path: Path) -> None:
+    marker = f"Пункт {random.randint(1, 999)}"
+    sheets = Doc(
+        source_doc(tmp_path), fake_soffice(tmp_path, 0, marker), tmp_path / "home"
+    ).sheets()
+    folder = Path((tmp_path / "calls").read_text().strip())
+    assert_that(
+        (folder.parent, marker in text(sheets)),
+        equal_to((tmp_path / "home" / "work", True)),
+        "Doc does not convert in the work folder of its home",
+    )
+
+
+def test_converts_the_same_document_once(tmp_path: Path) -> None:
+    command = fake_soffice(tmp_path, 0, "x")
+    source = source_doc(tmp_path)
+    Doc(source, command, tmp_path / "home").sheets()
+    Doc(source, command, tmp_path / "home").sheets()
+    assert_that(
+        len((tmp_path / "calls").read_text().splitlines()),
+        equal_to(1),
+        "Doc does not use the cache and converts a document again",
+    )
+
+
+def aged(path: Path, seconds: float, now: float) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x")
+    os.utime(path, (now - seconds, now - seconds))
+    return path
+
+
+def test_sweeps_converted_files_older_than_the_edge_only(tmp_path: Path) -> None:
+    now = time.time()
+    cache = tmp_path / "cache"
+    old = aged(cache / "old.docx", 7 * 86400 + 1, now)
+    edge = aged(cache / "edge.docx", 7 * 86400, now)
+    new = aged(cache / "new.docx", 7 * 86400 - 1, now)
+    Conversions(tmp_path).sweep(now - 7 * 86400)
+    assert_that(
+        (old.exists(), edge.exists(), new.exists()),
+        equal_to((False, True, True)),
+        "Conversions do not remove exactly the files older than the edge",
+    )
+
+
+def test_sweeps_leftover_parts_and_work_folders(tmp_path: Path) -> None:
+    now = time.time()
+    part = aged(tmp_path / "cache" / "a.docx.1.2.part", 100, now)
+    leftover = aged(tmp_path / "work" / "tmp1" / "a.docx", 100, now)
+    os.utime(leftover.parent, (now - 100, now - 100))
+    count = Conversions(tmp_path).sweep(now - 10)
+    assert_that(
+        (part.exists(), leftover.parent.exists(), count),
+        equal_to((False, False, 2)),
+        "Conversions do not remove stale parts and work folders",
+    )
+
+
+def test_sweeps_idle_profiles_and_keeps_leased_one(tmp_path: Path) -> None:
+    profiles = Profiles(tmp_path / "profiles", 2)
+    with profiles.lease() as busy:
+        busy.mkdir()
+        idle = tmp_path / "profiles" / "profile-1"
+        (idle / "user").mkdir(parents=True)
+        Conversions(tmp_path).sweep(0)
+        kept = (busy.exists(), idle.exists())
+    assert_that(kept, equal_to((True, False)), "Conversions do not clear only the idle profiles")
