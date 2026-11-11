@@ -105,6 +105,7 @@ clause: term                      # ключ пункта в профиле по
 check: date_range                 # exact | fuzzy | date_range | lte_limit | filled | in_list | conditional | semantic
 rule: "…"                         # правило словами; для semantic уходит в промпт
 params: {…}                       # параметры типа проверки
+                                  #   date_range: bounds, extension, end_before_start (правило 6)
 if_empty: mismatch                # match | mismatch | skip | review
 comments:                         # шаблоны: {reference}, {entry}, {amount}, {limit}, {policy_start}, {policy_end}
   match: "Входит в срок действия ГП"
@@ -127,6 +128,14 @@ clarify: […]                      # что уточнить у ФСЦ
 4. Пункта нет в профиле (`Absent`) → «требует проверки» с кодом `clause.absent`.
 5. Код причины: `<поле>.<исход>`, например `period_end.after_policy_end`, `sum.over_limit`,
    `sum.currency`, `cargo.excluded`, `llm.invalid_json`.
+6. **Порядок дат (`date_range`, D-35).** Если в `params.bounds` есть `end`, карточка обязана
+   задать `params.end_before_start` (`match | mismatch | review`). Окончание раньше начала
+   проверяется кодом до запроса пункта полиса: профиль и выбор редакции не нужны. Результат —
+   статус из `end_before_start`, код `<поле>.end_before_start`, комментарий
+   `comments.end_before_start`, ссылка на пункт пустая. Начало без собственной даты в поле
+   (ПСГ, `period_end`) берётся из строки перевозки. Окончание, равное началу, — не ошибка.
+   Нераспознанные даты идут дальше по обычной цепочке и дают `unreadable` или `clause.*`.
+   Проверка стоит после особых условий (правило 2).
 
 ## 4. Профиль полиса
 
