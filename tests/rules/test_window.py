@@ -1,3 +1,4 @@
+import random
 from collections.abc import Mapping
 from datetime import date
 
@@ -7,9 +8,11 @@ from app.declarations.schema import Fields
 from app.domain.errors import UnreadableError
 from app.domain.place import Spot
 from app.domain.policy import Policy, Vacant
+from app.domain.status import Match, Mismatch, Review, Status
 from app.domain.verdict import Verdict
 from app.rules.answers import Replies
-from app.rules.window import Window
+from app.rules.probe import Grounded
+from app.rules.window import Ordered, Window
 from app.rules.wording import Comments
 from tests.rules.fakes import Doubtful, Paper, Profile, Text
 
@@ -26,6 +29,31 @@ def _verdict(
         Spot("11", key),
         Comments({"match": "", "mismatch": "до {policy_end}", "review": ""}),
         Replies((), ()),
+    )
+
+
+def _ordered(
+    bounds: tuple[str, ...],
+    status: Status,
+    key: str,
+    row: Mapping[str, tuple[str, ...]],
+    policy: Policy,
+) -> Verdict:
+    return (
+        Ordered(bounds, status, Grounded("term", Window(bounds, "term_extension")))
+        .outcome(Fields().field(key, row[key]), Paper("12", "psg", (row,)).shipments()[0], policy)
+        .verdict(
+            Spot("12", key),
+            Comments(
+                {
+                    "match": "",
+                    "mismatch": "",
+                    "review": "",
+                    "end_before_start": "окончание раньше начала",
+                }
+            ),
+            Replies((), ()),
+        )
     )
 
 
@@ -101,18 +129,148 @@ def test_end_past_the_term_without_extension_is_after_policy_end() -> None:
     )
 
 
-def test_end_before_the_start_needs_a_person() -> None:
+def test_period_ending_before_its_start_is_found_without_a_profile() -> None:
     assert_that(
-        _verdict(
-            Window(("start", "end"), "term_extension"),
+        _ordered(
+            ("start", "end"),
+            Mismatch(),
             "period",
-            {"period": ("12.09.2026", "12.08.2026")},
+            {"period": ("с 12.09.2026 по 12.08.2026",)},
+            Vacant("1"),
+        )
+        .reason()
+        .code(),
+        equal_to("period.end_before_start"),
+        "Ordered does not find an end before the start without a policy profile",
+    )
+
+
+def test_period_ending_before_its_start_is_found_when_the_term_is_unsettled() -> None:
+    assert_that(
+        _ordered(
+            ("start", "end"),
+            Mismatch(),
+            "period",
+            {"period": ("from 12.09.2026 to 12.08.2026",)},
+            Doubtful("редакция не выбрана"),
+        )
+        .reason()
+        .code(),
+        equal_to("period.end_before_start"),
+        "Ordered does not find an end before the start when the term cannot be chosen",
+    )
+
+
+def test_end_before_the_start_of_the_row_is_found_without_a_profile() -> None:
+    assert_that(
+        _ordered(
+            ("end",),
+            Mismatch(),
+            "period_end",
+            {"period_start": ("12.09.2026",), "period_end": ("12.08.2026",)},
+            Vacant("1"),
+        )
+        .reason()
+        .code(),
+        equal_to("period_end.end_before_start"),
+        "Ordered does not find a row end before the row start without a policy profile",
+    )
+
+
+def test_end_before_the_start_takes_the_status_of_the_card() -> None:
+    status = random.choice((Match(), Mismatch(), Review()))
+    assert_that(
+        _ordered(
+            ("start", "end"),
+            status,
+            "period",
+            {"period": ("12.09.2026 - 12.08.2026",)},
             Vacant("1"),
         )
         .status()
         .key(),
-        equal_to("review"),
-        "Window does not ask for review of an end before the start",
+        equal_to(status.key()),
+        "Ordered does not give the status of the card to an end before the start",
+    )
+
+
+def test_end_before_the_start_takes_the_comment_of_the_card() -> None:
+    assert_that(
+        _ordered(
+            ("end",),
+            Mismatch(),
+            "period_end",
+            {"period_start": ("12.09.2026",), "period_end": ("12.08.2026",)},
+            Doubtful("редакция не выбрана"),
+        )
+        .remark()
+        .comment(),
+        equal_to("окончание раньше начала"),
+        "Ordered does not word an end before the start with the comment of the card",
+    )
+
+
+def test_end_on_the_day_of_the_start_is_in_order() -> None:
+    assert_that(
+        _ordered(
+            ("start", "end"),
+            Mismatch(),
+            "period",
+            {"period": ("12.09.2026 to 12.09.2026",)},
+            Profile({"term": Text("ГП п. 6", "срок", dates=(date(2026, 1, 1), date(2026, 9, 20)))}),
+        )
+        .reason()
+        .code(),
+        equal_to("period.within"),
+        "Ordered does not accept an end on the day of the start",
+    )
+
+
+def test_unreadable_period_is_not_taken_for_disorder() -> None:
+    assert_that(
+        _ordered(
+            ("start", "end"),
+            Mismatch(),
+            "period",
+            {"period": ("с сентября по 12.08.2026",)},
+            Profile({"term": Text("ГП п. 6", "срок", dates=(date(2026, 1, 1), date(2026, 9, 20)))}),
+        )
+        .reason()
+        .code(),
+        equal_to("period.unreadable"),
+        "Ordered does not leave an unreadable period to the review of the window",
+    )
+
+
+def test_unreadable_start_of_the_row_is_not_taken_for_disorder() -> None:
+    assert_that(
+        _ordered(
+            ("end",),
+            Mismatch(),
+            "period_end",
+            {"period_start": ("first of September",), "period_end": ("12.08.2026",)},
+            Profile({"term": Text("ГП п. 6", "срок", dates=(date(2026, 1, 1), date(2026, 9, 20)))}),
+        )
+        .reason()
+        .code(),
+        equal_to("period_end.unreadable"),
+        "Ordered does not leave an unreadable row start to the review of the window",
+    )
+
+
+def test_period_in_order_without_a_profile_still_needs_the_term() -> None:
+    assert_that(
+        _ordered(
+            ("start", "end"),
+            Mismatch(),
+            "period",
+            {"period": ("12.08.2026 - 12.09.2026",)},
+            Vacant("1"),
+        )
+        .reason()
+        .code(),
+        equal_to("clause.absent"),
+        "Ordered does not leave a period in order to the term of the policy",
     )
 
 
