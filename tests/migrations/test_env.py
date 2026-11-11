@@ -82,6 +82,40 @@ def test_generates_sql_for_postgres_without_connection(tmp_path: Path) -> None:
     )
 
 
+def test_adds_binding_to_declarations_and_removes_it_on_downgrade(tmp_path: Path) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{tmp_path / 'b.db'}")
+    command.upgrade(config, "head")
+    with sqlite3.connect(tmp_path / "b.db") as connection:
+        upgraded_columns = {row[1] for row in connection.execute("PRAGMA table_info(declarations)")}
+    command.downgrade(config, "0004")
+    with sqlite3.connect(tmp_path / "b.db") as connection:
+        downgraded_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(declarations)")
+        }
+    assert_that(
+        ("binding" in upgraded_columns, "binding" in downgraded_columns),
+        equal_to((True, False)),
+        "Migration does not add the binding column and remove it on downgrade",
+    )
+
+
+def test_generates_sql_with_binding_of_declaration_for_postgres(tmp_path: Path) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))
+    config.set_main_option("sqlalchemy.url", "postgresql+asyncpg://u:p@h/db")
+    out = tmp_path / "up.sql"
+    config.output_buffer = out.open("w", encoding="utf-8")
+    command.upgrade(config, "head", sql=True)
+    config.output_buffer.close()
+    assert_that(
+        "ALTER TABLE declarations ADD COLUMN binding" in out.read_text(encoding="utf-8"),
+        equal_to(True),
+        "Offline migration does not add the binding column of declarations for Postgres",
+    )
+
+
 def test_generates_sql_with_build_job_of_policy_for_postgres(tmp_path: Path) -> None:
     config = Config()
     config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))

@@ -5,6 +5,7 @@ from pathlib import Path
 from hamcrest import assert_that, equal_to, raises
 
 from app.core.clock import Utc
+from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.errors import WaitingError
 from app.jobs.folios import Folios
@@ -12,6 +13,7 @@ from app.jobs.models import Base, Declaration, Policy
 from app.jobs.queue import Queue, Snapshot
 from app.jobs.stages import Profiled, Routed, Standard, UnknownKindError
 from app.policy.schema.profile import Profile
+from app.storage.disk import DiskStorage
 
 
 class Silent:
@@ -107,9 +109,11 @@ def test_passes_declaration_of_policy_with_approved_profile(tmp_path: Path) -> N
 async def asks_pipelines_for_other_kind(tmp_path: Path) -> None:
     database, folio = await prepare(tmp_path, bound=False)
     try:
-        Routed(Standard(Silent(), folio, database), Standard(Silent(), folio, database)).stages(
-            "other"
-        )
+        bench = Workbench(DiskStorage(tmp_path / "files"), tmp_path / "home")
+        Routed(
+            Standard(Silent(), folio, database, bench, tmp_path),
+            Standard(Silent(), folio, database, bench, tmp_path),
+        ).stages("other")
     finally:
         await database.close()
 

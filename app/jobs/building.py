@@ -56,9 +56,12 @@ class Shelf[T]:
 
 
 class Bench(Protocol):
-    """Place where a package is unpacked and its doc files are converted, kept in one folder."""
+    """Place where a package is unpacked, a declaration is copied and doc files are converted,
+    kept in one folder; the folder of a copied declaration is the parent of the returned path."""
 
     def unpack(self, prefix: str) -> Path: ...
+
+    def copy(self, key: str) -> Path: ...
 
     def warm(self, path: Path) -> None: ...
 
@@ -84,6 +87,18 @@ class Workbench:
             shutil.rmtree(folder, ignore_errors=True)
             raise
         return folder
+
+    def copy(self, key: str) -> Path:
+        work = self._home / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        folder = Path(tempfile.mkdtemp(prefix="declaration-", dir=work))
+        try:
+            path = folder / key.rsplit("/", 1)[-1]
+            path.write_bytes(self._storage.read(key))
+        except BaseException:
+            shutil.rmtree(folder, ignore_errors=True)
+            raise
+        return path
 
     def warm(self, path: Path) -> None:
         with suppress(UnreadableError):

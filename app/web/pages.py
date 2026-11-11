@@ -82,7 +82,9 @@ async def status(
     except MissingJobError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     await visible(request, who, job_id)
-    return templates.TemplateResponse(request, "job.html", {"job": snapshot})
+    async with services(request).database.session() as session:
+        note = await session.scalar(select(Declaration.binding).where(Declaration.job_id == job_id))
+    return templates.TemplateResponse(request, "job.html", {"job": snapshot, "note": note or ""})
 
 
 @router.get("/archive", response_class=HTMLResponse)

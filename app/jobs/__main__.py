@@ -42,10 +42,11 @@ async def run() -> None:
             Tracked(database, asyncio.get_running_loop(), environment.llm_total_timeout),
         )
     )
+    bench = Workbench(DiskStorage(settings.storage()), settings.soffice())
     pipelines = Routed(
-        Standard(journal, folio, database),
+        Standard(journal, folio, database, bench, settings.cards()),
         Building(
-            Workbench(DiskStorage(settings.storage()), settings.soffice()),
+            bench,
             folio,
             Shelving(database, queue, DiskStorage(settings.storage()), Keys()),
             gateway,

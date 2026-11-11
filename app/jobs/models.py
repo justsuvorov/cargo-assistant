@@ -93,6 +93,7 @@ class Declaration(Base):
     form: Mapped[str] = mapped_column(String(32), default="")
     shipments: Mapped[int] = mapped_column(Integer, default=0)
     month: Mapped[str] = mapped_column(String(7), default="", index=True)
+    binding: Mapped[str] = mapped_column(String(32), default="")
     result_key: Mapped[str] = mapped_column(String(512), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime)
     places_expected: Mapped[int] = mapped_column(Integer, default=0)

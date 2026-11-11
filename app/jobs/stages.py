@@ -5,6 +5,7 @@ from typing import Final, Protocol, final
 from sqlalchemy import select
 
 from app.core.journal import Journal
+from app.jobs.binding import Binding, Ingesting, Matching, Numbering
 from app.jobs.building import (
     Bench,
     Converting,
@@ -92,20 +93,33 @@ class Profiled:
 
 @final
 class Standard:
-    """Pipelines of the service where the reconciliation stages are still empty."""
+    """Pipelines of the service where the reading and the binding of a declaration are real and
+    the stages that check it are still empty."""
 
-    __slots__ = ("_folio", "_journal", "_sessions")
+    __slots__ = ("_bench", "_cards", "_folio", "_journal", "_sessions")
 
-    def __init__(self, journal: Journal, folio: Folio, sessions: Sessions) -> None:
+    def __init__(
+        self, journal: Journal, folio: Folio, sessions: Sessions, bench: Bench, cards: Path
+    ) -> None:
         self._journal: Final = journal
         self._folio: Final = folio
         self._sessions: Final = sessions
+        self._bench: Final = bench
+        self._cards: Final = cards
 
     def stages(self, kind: str) -> tuple[Stage, ...]:
         if kind != "reconcile":
             raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
+        policy: Shelf[str] = Shelf()
         return (
-            *(Pending(name, self._journal) for name in ("ingest", "fields", "normalize", "bind")),
+            Ingesting(self._bench, self._sessions, policy, self._journal),
+            *(Pending(name, self._journal) for name in ("fields", "normalize")),
+            Binding(
+                Matching(self._sessions, Numbering(self._cards)),
+                self._sessions,
+                policy,
+                self._journal,
+            ),
             Profiled(self._folio, self._sessions),
             *(Pending(name, self._journal) for name in ("check", "semantic", "report")),
         )

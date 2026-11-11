@@ -90,8 +90,8 @@ class Profiles:
     def _taken(self, lock: Path) -> bool:
         try:
             lock.mkdir()
-        except FileExistsError:
-            with suppress(FileNotFoundError):
+        except (FileExistsError, PermissionError):
+            with suppress(FileNotFoundError, PermissionError):
                 if time.time() - lock.stat().st_mtime > _STALE:
                     shutil.rmtree(lock, ignore_errors=True)
             return False
@@ -193,7 +193,7 @@ class Doc:
             process = subprocess.Popen(
                 [
                     program,
-                    f"-env:UserInstallation={profile.as_uri()}",
+                    f"-env:UserInstallation={profile.resolve().as_uri()}",
                     "--headless",
                     "--norestore",
                     "--convert-to",
