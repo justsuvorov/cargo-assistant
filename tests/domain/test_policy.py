@@ -2,10 +2,11 @@ import random
 import uuid
 from datetime import date
 
-from hamcrest import assert_that, contains_string, empty, equal_to
+from hamcrest import assert_that, contains_string, empty, equal_to, raises
 
+from app.domain.errors import UnboundError
 from app.domain.field import Blank
-from app.domain.policy import Vacant
+from app.domain.policy import Unbound, Vacant
 
 
 def test_vacant_policy_has_no_clause() -> None:
@@ -24,6 +25,34 @@ def test_vacant_policy_keeps_the_cited_number() -> None:
 
 def test_vacant_policy_has_no_special_conditions() -> None:
     assert_that(Vacant("1").conditions(), empty(), "Vacant policy does not stay without conditions")
+
+
+def test_unbound_policy_refuses_every_clause_with_its_reason() -> None:
+    reason = random.choice(
+        ["policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous"]
+    )
+    assert_that(
+        lambda: Unbound(reason, "1").clause(uuid.uuid4().hex, _Row()),
+        raises(UnboundError, f"^{reason}$"),
+        "Unbound policy does not refuse a clause with the reason of its binding",
+    )
+
+
+def test_unbound_policy_keeps_the_cited_number() -> None:
+    number = f"{random.randint(1000, 9999)}T00GR{random.randint(1000, 9999)}"
+    assert_that(
+        Unbound("policy_unknown", number).number(),
+        equal_to(number),
+        "Unbound policy does not keep its number",
+    )
+
+
+def test_unbound_policy_has_no_special_conditions() -> None:
+    assert_that(
+        Unbound("policy_missing", "").conditions(),
+        empty(),
+        "Unbound policy does not stay without conditions",
+    )
 
 
 class _Row:
