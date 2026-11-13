@@ -256,6 +256,16 @@ def _calls(count: int) -> int:
     return len(oracle.batches)
 
 
+def _party(field: str, text: str) -> tuple[str, str]:
+    card = next(
+        card for card in Cards(_folder(), Mute()).cards("vertical") if card.field() == field
+    )
+    verdict = card.verdicts(
+        Paper("23", "vertical", ({field: (text,), "period": ("14.09.2026",)},)), Vacant("1")
+    )[0]
+    return (verdict.status().key(), verdict.reason().code())
+
+
 def test_model_calls_do_not_grow_with_rows() -> None:
     assert_that(
         (_calls(2), _calls(40)),
@@ -412,4 +422,77 @@ def test_date_range_with_an_end_without_its_order_status_fails_loudly(tmp_path: 
         lambda: Cards(folder, Mute()).cards("vertical"),
         raises(CardError, "end_before_start"),
         "Cards does not reject a date range with an end but without the status of disorder",
+    )
+
+
+def test_foreign_legal_form_of_a_beneficiary_matches() -> None:
+    assert_that(
+        _party("beneficiary", f"{random.choice(('Neva', 'Ural'))} Trading LLC"),
+        equal_to(("match", "beneficiary.foreign")),
+        "Cards does not accept a foreign legal form of the beneficiary",
+    )
+
+
+def test_cyrillic_foreign_legal_form_of_a_carrier_matches() -> None:
+    assert_that(
+        _party("carrier", "ТОО «Степной транзит»"),
+        equal_to(("match", "carrier.foreign")),
+        "Cards does not accept a foreign legal form of the carrier written in Cyrillic",
+    )
+
+
+def test_foreign_legal_form_of_a_carrier_matches() -> None:
+    assert_that(
+        _party("carrier", f"Shenzhen {random.randint(1, 9)} Freight Forwarding Co., Ltd"),
+        equal_to(("match", "carrier.foreign")),
+        "Cards does not accept a foreign legal form of the carrier",
+    )
+
+
+def test_english_legal_form_fused_with_an_address_needs_a_person() -> None:
+    assert_that(
+        _party("beneficiary", "NORTH TECHNOLOGIES LLCAddress: Moscow, Lenina St., 1"),
+        equal_to(("review", "beneficiary.fused")),
+        "Cards does not ask for review of a legal form fused with the next word",
+    )
+
+
+def test_russian_legal_form_fused_with_a_name_needs_a_person() -> None:
+    assert_that(
+        _party("carrier", "ОООТранспортная компания, г. Тверь"),
+        equal_to(("review", "carrier.fused")),
+        "Cards does not ask for review of a Russian legal form fused with the name",
+    )
+
+
+def test_beneficiary_without_legal_form_is_a_mismatch() -> None:
+    assert_that(
+        (_party("beneficiary", "СЕВЕР"), _party("beneficiary", "SEVER TRADE")),
+        equal_to((("mismatch", "beneficiary.unformed"), ("mismatch", "beneficiary.latin"))),
+        "Cards does not reject a beneficiary without a legal form",
+    )
+
+
+def test_foreign_carrier_without_legal_form_matches() -> None:
+    assert_that(
+        _party("carrier", "NORTHERN AIRLINES-NRA"),
+        equal_to(("match", "carrier.latin")),
+        "Cards does not accept a carrier without a legal form written only in Latin letters",
+    )
+
+
+def test_resident_carrier_without_legal_form_needs_a_person() -> None:
+    assert_that(
+        _party("carrier", "Транспортная компания Север"),
+        equal_to(("review", "carrier.unformed")),
+        "Cards does not ask for review of a carrier without a legal form in Cyrillic",
+    )
+
+
+def test_party_card_without_statuses_of_its_cases_fails_loudly(tmp_path: Path) -> None:
+    folder = _card(tmp_path, "beneficiary", {"params": '{shape: party, legal_forms: ["ООО"]}'})
+    assert_that(
+        lambda: Cards(folder, Mute()).cards("vertical"),
+        raises(CardError, "party"),
+        "Cards does not reject a party card without the statuses of its cases",
     )
