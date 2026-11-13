@@ -30,8 +30,8 @@
 web          ──► jobs, policy, storage, auth, core
 jobs         ──► reconcile*, rules (только загрузка карточек: rules.schema), declarations, policy,
                  llm, ingest, storage, core, domain
-reconcile*   ──► rules, declarations, ingest, domain          (* создаётся в T-29, D-42)
-semantic*    ──► llm, domain                                    (* создаётся в T-30)
+reconcile    ──► rules, domain                                 (D-42, T-29)
+semantic     ──► llm, domain                                   (T-30)
 knowledge*   ──► llm, domain                                    (* этап 5, ещё нет)
 policy       ──► llm, ingest, core, domain
 declarations ──► ingest, domain
