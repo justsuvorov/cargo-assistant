@@ -89,3 +89,49 @@ def test_names_the_model_of_the_chosen_provider(tmp_path: Path) -> None:
         equal_to(name),
         "Model is not taken from the settings of the chosen provider",
     )
+
+
+def test_keeps_login_required_when_nothing_is_set(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).development(),
+        equal_to(False),
+        "Login is not required by default",
+    )
+
+
+def test_disables_login_by_new_switch(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("AUTH_DISABLED=true\n", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).development(),
+        equal_to(True),
+        "Login is not disabled by the new switch",
+    )
+
+
+def test_disables_login_by_old_switch_as_synonym(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("AUTH_DEV_MODE=true\n", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).development(),
+        equal_to(True),
+        "Login is not disabled by the old switch kept as a synonym",
+    )
+
+
+def test_names_local_user_dev_user_by_default(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).user(),
+        equal_to("dev-user"),
+        "Local user is not dev-user by default",
+    )
+
+
+def test_takes_local_user_from_environment(tmp_path: Path) -> None:
+    name = f"u{random.randint(1, 999)}"
+    (tmp_path / ".env").write_text(f"AUTH_DEV_USER_ID={name}\n", encoding="utf-8")
+    assert_that(
+        EnvSettings(Environment(str(tmp_path / ".env"))).user(),
+        equal_to(name),
+        "Local user is not taken from the environment",
+    )

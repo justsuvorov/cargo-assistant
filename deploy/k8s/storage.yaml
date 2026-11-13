@@ -2,7 +2,9 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: cargo-storage
+  namespace: cargo-assistant
 spec:
+  storageClassName: replace-with-rwx-class
   accessModes:
     - ReadWriteMany
   resources:

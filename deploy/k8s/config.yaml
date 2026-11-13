@@ -2,9 +2,12 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: cargo-config
+  namespace: cargo-assistant
 data:
   STORAGE_DIR: /data/storage
-  AUTH_DEV_MODE: "false"
+  AUTH_DISABLED: "true"
+  AUTH_DEV_USER_ID: dev-user
+  FORWARDED_ALLOW_IPS: "*"
   KEYCLOAK_URL: https://keycloak.example.invalid
   KEYCLOAK_REALM: cargo
   KEYCLOAK_CLIENT_ID: cargo-assistant
@@ -26,6 +29,7 @@ data:
   LLM_EMPTY_ATTEMPTS: "3"
   LLM_EMPTY_PAUSE: "1"
   LLM_VERIFY_TLS: "true"
+  LLM_CA_BUNDLE: ""
   WORKER_MAX_JOBS: "2"
   WORKER_POLL_INTERVAL: "1"
   WORKER_JOB_TIMEOUT: "600"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>Сверка деклараций</title>
-  <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+  <script src="/static/htmx.min.js"></script>
   <style>
     body { font-family: sans-serif; margin: 0; color: #222; }
     nav { background: #1f3a5f; padding: 0.8rem 1.5rem; }
@@ -17,6 +17,7 @@
     .alert { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 6px solid; }
     .alert.problems { background: #fff3cd; border-color: #e0a800; font-size: 1.05rem; }
     .alert.error { background: #fde8e8; border-color: #c62828; }
+    .unprotected { background: #b71c1c; color: #fff; padding: 0.5rem 1.5rem; font-weight: bold; }
     .undefined { color: #c62828; font-weight: bold; margin-left: 0.5rem; }
     .status-waiting { color: #886600; }
     .status-queued { color: #886600; }
@@ -26,6 +27,9 @@
   </style>
 </head>
 <body>
+  {% if request.app.state.services.settings.development() %}
+  <div class="unprotected">Внимание: вход отключён, сервис доступен без проверки пользователя</div>
+  {% endif %}
   <nav>
     <a href="/policies" class="{{ 'current' if page == 'policies' }}">Полисы</a>
     <a href="/reconcile" class="{{ 'current' if page == 'reconcile' }}">Сверка</a>

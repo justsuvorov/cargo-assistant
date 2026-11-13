@@ -134,9 +134,19 @@ def test_rejects_garbage_instead_of_token(tmp_path: Path) -> None:
 
 
 def test_open_passport_allows_everything_without_token() -> None:
-    identity = Open().identity("")
+    identity = Open("dev-user").identity("")
     assert_that(
         (identity.allows("admin"), identity.sees("any"), identity.group()),
         equal_to((True, True, "dev")),
         "Development passport does not allow everything",
+    )
+
+
+def test_open_passport_gives_configured_local_user() -> None:
+    user = f"user{random.randint(1, 999)}"
+    identity = Open(user).identity("anything")
+    assert_that(
+        (identity.id(), identity.name()),
+        equal_to((user, "Локальный пользователь")),
+        "Development passport does not give the configured local user",
     )

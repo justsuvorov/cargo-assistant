@@ -4,7 +4,7 @@ import jwt
 from jwt import PyJWK, PyJWKClient
 
 from app.auth.errors import DeniedError
-from app.auth.identity import Identity, Person
+from app.auth.identity import Identity, Local, Person
 from app.core.settings import Settings
 
 
@@ -48,14 +48,16 @@ class StaticKeys:
 
 @final
 class Open:
-    """Passport of development mode that accepts everybody, named by the token if there is one."""
+    """Passport of a deployment without login that gives everybody the one local user."""
 
-    __slots__ = ()
+    __slots__ = ("_user",)
+
+    def __init__(self, user: str) -> None:
+        self._user: Final = user
 
     def identity(self, token: str) -> Identity:
-        return Person(
-            token or "developer", frozenset({"user", "expert", "admin"}), frozenset({"*", "dev"})
-        )
+        del token
+        return Local(self._user)
 
 
 @final

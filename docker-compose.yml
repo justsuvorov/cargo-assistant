@@ -3,7 +3,9 @@ x-app: &app
   environment:
     DATABASE_URL: postgresql+asyncpg://cargo:${POSTGRES_PASSWORD:-cargo}@postgres:5432/cargo
     STORAGE_DIR: /data/storage
-    AUTH_DEV_MODE: ${AUTH_DEV_MODE:-true}
+    AUTH_DISABLED: ${AUTH_DISABLED:-true}
+    AUTH_DEV_USER_ID: ${AUTH_DEV_USER_ID:-dev-user}
+    FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
     KEYCLOAK_URL: ${KEYCLOAK_URL:-}
     KEYCLOAK_REALM: ${KEYCLOAK_REALM:-}
     KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-}

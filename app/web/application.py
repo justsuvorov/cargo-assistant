@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.auth.passport import Keycloak, Open, Passport, RemoteKeys
 from app.core.clock import Utc
+from app.core.journal import Sink
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings, Settings
 from app.jobs.database import Database
@@ -21,11 +23,21 @@ from app.web.services import Services
 
 
 def passport(settings: Settings) -> Passport:
-    return Open() if settings.development() else Keycloak(settings, RemoteKeys(settings.certs()))
+    return (
+        Open(settings.user())
+        if settings.development()
+        else Keycloak(settings, RemoteKeys(settings.certs()))
+    )
+
+
+def announce(settings: Settings, sink: Sink) -> None:
+    if settings.development():
+        sink.warning("Вход отключён, сервис доступен без проверки пользователя")
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI) -> AsyncIterator[None]:
+    announce(application.state.services.settings, logging.getLogger("web"))
     yield
     await application.state.services.database.close()
 
@@ -56,4 +68,5 @@ def create_app(settings: Settings) -> FastAPI:
 
 
 def build() -> FastAPI:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     return create_app(EnvSettings(Environment()))

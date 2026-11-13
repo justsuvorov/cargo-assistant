@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: cargo-worker
+  namespace: cargo-assistant
 spec:
   replicas: 2
   selector:
@@ -15,7 +16,7 @@ spec:
       terminationGracePeriodSeconds: 120
       containers:
         - name: worker
-          image: cargo-assistant:latest
+          image: registry.example.invalid/cargo-assistant:replace-with-tag
           command: ["python", "-m", "app.jobs"]
           envFrom:
             - configMapRef:
@@ -25,7 +26,14 @@ spec:
           volumeMounts:
             - name: storage
               mountPath: /data/storage
+            - name: ca
+              mountPath: /etc/cargo-ca
+              readOnly: true
       volumes:
         - name: storage
           persistentVolumeClaim:
             claimName: cargo-storage
+        - name: ca
+          configMap:
+            name: cargo-ca
+            optional: true

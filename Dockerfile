@@ -21,6 +21,7 @@ COPY migrations ./migrations
 COPY cards ./cards
 
 RUN pip install --no-cache-dir . \
+    && rm -rf build ./*.egg-info \
     && useradd --system --uid 10001 --create-home --home-dir /home/cargo cargo \
     && mkdir -p /data/storage \
     && chown cargo /data/storage
