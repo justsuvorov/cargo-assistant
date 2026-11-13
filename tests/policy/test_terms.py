@@ -171,3 +171,77 @@ def test_reads_declaration_after_words_about_shipment() -> None:
         contains_exactly("035"),
         "Terms does not read a declaration after the words about shipment",
     )
+
+
+def _attached(*lines: str) -> str:
+    return "\n".join(
+        (
+            _text(
+                "«26» ноября 2020 г.",
+                "01.01.2021",
+                "для перевозки по декларации № 154 об отгрузке:",
+            ),
+            "Подписи Сторон",
+            "Приложение",
+            *lines,
+        )
+    )
+
+
+def test_reads_declaration_of_attachment_after_signatures() -> None:
+    terms = Terms(_attached("1. Приложение № 1 - Декларация № 528 об отгрузке от 06.07.2026 г."))
+    assert_that(
+        terms.attached(),
+        contains_exactly("528"),
+        "Terms does not read the declaration of an attachment placed after the signatures",
+    )
+
+
+def test_reads_declaration_of_english_attachment() -> None:
+    terms = Terms(_attached("Attachment No. 2 - Declaration No. 77-A of shipment dated 06.07.2026"))
+    assert_that(
+        terms.attached(),
+        contains_exactly("77-A"),
+        "Terms does not read the declaration of an English attachment",
+    )
+
+
+def test_does_not_take_attachment_number_or_date_for_declaration() -> None:
+    terms = Terms(_attached("Приложение № 1 к настоящему соглашению от 06.07.2026 г."))
+    assert_that(
+        terms.attached(),
+        empty(),
+        "Terms does not leave the number of an attachment and a date out of the declarations",
+    )
+
+
+def test_scope_holds_declarations_of_text_and_attachments_once() -> None:
+    terms = Terms(
+        _attached(
+            "Приложение № 1 - Декларация № 528 об отгрузке от 06.07.2026 г.",
+            "Приложение № 2 - Декларация № 528 об отгрузке от 06.07.2026 г.",
+            "Приложение № 3 - Декларация № 154 об отгрузке от 06.07.2026 г.",
+        )
+    )
+    assert_that(
+        terms.scope(),
+        contains_exactly("154", "528"),
+        "Terms does not join the declarations of the text and attachments without repeats",
+    )
+
+
+def test_scope_is_taken_from_attachment_when_text_names_none() -> None:
+    terms = Terms(
+        "\n".join(
+            (
+                "Дополнительное соглашение № 5",
+                "к полису",
+                "Приложение № 1 - Декларация № 9 об отгрузке",
+            )
+        )
+    )
+    assert_that(
+        terms.scope(),
+        contains_exactly("9"),
+        "Terms does not take the scope from an attachment when the text names no declaration",
+    )

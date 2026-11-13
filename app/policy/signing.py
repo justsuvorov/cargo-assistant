@@ -15,6 +15,8 @@ class Signing:
     A paper with no number, with no signing date or with no entry into force is a draft, and a
     paper whose declarations are named but blank has an unknown scope. Both are left out and
     named in problems. An entry into force that precedes signing is kept and named in problems.
+    An amendment whose text and attachments name different declarations applies to all of
+    them, and the problems name both numbers.
     """
 
     __slots__ = ("_paper",)
@@ -42,7 +44,19 @@ class Signing:
             )
         return Result(
             (Agreement(self._paper, title.number()[0], terms.effective()[0], terms.scope()),),
-            self._order(label, terms.signed()[0], terms.effective()[0]),
+            self._order(label, terms.signed()[0], terms.effective()[0])
+            + self._mismatch(label, terms),
+        )
+
+    def _mismatch(self, label: str, terms: Terms) -> tuple[str, ...]:
+        written, attached = terms.written(), terms.attached()
+        return (
+            (
+                f"{label}: в тексте названа декларация {', '.join(written)},"
+                f" а в приложении {', '.join(attached)}, ДС отнесено к обеим",
+            )
+            if written and attached and set(written) != set(attached)
+            else ()
         )
 
     def _missing(self, terms: Terms) -> str:
