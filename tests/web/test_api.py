@@ -1,5 +1,6 @@
 import asyncio
 import random
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from alembic import command
@@ -12,11 +13,13 @@ from app.core.clock import Utc
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.building import Workbench
+from app.jobs.checking import Postponing
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
 from app.jobs.queue import Queue
-from app.jobs.stages import Standard
+from app.jobs.stages import Kit, Standard
+from app.jobs.versions import Stamp
 from app.jobs.worker import Shift
 from app.storage.disk import DiskStorage
 from app.web.application import create_app
@@ -99,7 +102,14 @@ async def work(config: EnvSettings) -> int:
     database = Database(config.database())
     queue = Queue(database, Utc())
     bench = Workbench(DiskStorage(config.storage()), config.soffice())
-    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database, bench, config.cards())
+    kit = Kit(
+        config.cards(),
+        DiskStorage(config.storage()),
+        Stamp("t", "c", "p", "m"),
+        Postponing(),
+        ThreadPoolExecutor(2),
+    )
+    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database, bench, kit)
     count = await Shift(queue, pipelines, config, Silent(), Blank()).drain()
     await database.close()
     return count

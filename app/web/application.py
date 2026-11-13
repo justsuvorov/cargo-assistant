@@ -16,7 +16,7 @@ from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.storage.disk import DiskStorage
 from app.storage.layout import Keys
-from app.web import api, pages, policies
+from app.web import api, pages, policies, results
 from app.web.services import Services
 
 
@@ -43,12 +43,14 @@ def create_app(settings: Settings) -> FastAPI:
         Shelving(database, queue, storage, Keys()),
         Folios(database, queue, Utc()),
         passport(settings),
+        storage,
     )
     application.mount(
         "/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static"
     )
     application.include_router(policies.router)
     application.include_router(pages.router)
+    application.include_router(results.router)
     application.include_router(api.router)
     return application
 

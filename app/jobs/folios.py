@@ -59,6 +59,8 @@ class Folio(Protocol):
 
     async def approved(self, policy_id: int) -> Reference: ...
 
+    async def version(self, policy_id: int) -> int: ...
+
 
 @final
 class Folios:
@@ -148,6 +150,16 @@ class Folios:
         if row is None:
             raise WaitingError("Ожидает профиль полиса")
         return Approved(self._version(row).profile)
+
+    async def version(self, policy_id: int) -> int:
+        async with self._sessions.session() as session:
+            found = await session.scalar(
+                select(PolicyProfile.version)
+                .where(PolicyProfile.policy_id == policy_id, PolicyProfile.status == "approved")
+                .order_by(PolicyProfile.version.desc())
+                .limit(1)
+            )
+        return found or 0
 
     def _version(self, row: PolicyProfile) -> Version:
         return Version(

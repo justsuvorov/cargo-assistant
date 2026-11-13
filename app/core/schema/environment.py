@@ -36,6 +36,7 @@ class Environment(BaseSettings):
     gemini_api_key: SecretStr = SecretStr("")
     gemini_model: str = ""
     worker_max_jobs: int = 2
+    semantic_threads: int = 0
     worker_poll_interval: float = 1.0
     worker_job_timeout: float = 600.0
     worker_max_attempts: int = 3

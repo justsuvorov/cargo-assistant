@@ -10,6 +10,7 @@
   <span class="status-{{ job.status }}">{{ labels[job.status] }}</span>
   <progress value="{{ job.progress }}" max="100"></progress>
   {{ job.progress }}% {% if job.stage %}({{ job.stage }}){% endif %}
+  {% if job.status == 'done' and result %}<a href="/declarations/{{ result }}">Результат</a>{% endif %}
   {% if job.error %}<em>{{ job.error }}</em>{% endif %}
   {% if note in reasons %}<em class="binding">{{ reasons[note] }}: пункты полиса будут отмечены «требует проверки»</em>{% endif %}
 </span>

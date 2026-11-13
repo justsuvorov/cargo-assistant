@@ -1,4 +1,5 @@
 import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 
@@ -6,12 +7,14 @@ from hamcrest import assert_that, equal_to, raises
 
 from app.core.clock import Utc
 from app.jobs.building import Workbench
+from app.jobs.checking import Postponing
 from app.jobs.database import Database
 from app.jobs.errors import WaitingError
 from app.jobs.folios import Folios
 from app.jobs.models import Base, Declaration, Policy
 from app.jobs.queue import Queue, Snapshot
-from app.jobs.stages import Profiled, Routed, Standard, UnknownKindError
+from app.jobs.stages import Kit, Profiled, Routed, Standard, UnknownKindError
+from app.jobs.versions import Stamp
 from app.policy.schema.profile import Profile
 from app.storage.disk import DiskStorage
 
@@ -108,13 +111,16 @@ def test_passes_declaration_of_policy_with_approved_profile(tmp_path: Path) -> N
 
 async def asks_pipelines_for_other_kind(tmp_path: Path) -> None:
     database, folio = await prepare(tmp_path, bound=False)
+    pool = ThreadPoolExecutor(1)
     try:
         bench = Workbench(DiskStorage(tmp_path / "files"), tmp_path / "home")
+        kit = Kit(tmp_path, DiskStorage(tmp_path), Stamp("t", "c", "p", "m"), Postponing(), pool)
         Routed(
-            Standard(Silent(), folio, database, bench, tmp_path),
-            Standard(Silent(), folio, database, bench, tmp_path),
+            Standard(Silent(), folio, database, bench, kit),
+            Standard(Silent(), folio, database, bench, kit),
         ).stages("other")
     finally:
+        pool.shutdown()
         await database.close()
 
 

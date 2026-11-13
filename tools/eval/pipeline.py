@@ -14,6 +14,7 @@ from app.domain.shipment import Shipment
 from app.domain.status import Review, Status
 from app.domain.verdict import Ruling, Verdict
 from app.ingest.source import Source
+from app.reconcile.reconciliation import Carded
 from app.rules.cards import Cards
 from tools.eval.fields import Forms
 from tools.eval.gold import Gold
@@ -211,10 +212,10 @@ class Checked:
         judge = Doubt()
         start = time.perf_counter()
         try:
-            verdicts = tuple(
-                verdict
-                for card in Cards(self._folder, judge).cards(declaration.form())
-                for verdict in card.verdicts(declaration, Vacant(declaration.policy()))
+            verdicts = (
+                Carded(Cards(self._folder, judge))
+                .findings(declaration, Vacant(declaration.policy()))
+                .verdicts()
             )
         except Exception as error:
             return Staged(

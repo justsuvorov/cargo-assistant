@@ -7,6 +7,7 @@ from app.jobs.folios import Folio
 from app.jobs.intake import Reception
 from app.jobs.packages import Packages
 from app.jobs.queue import Jobs
+from app.storage.disk import Storage
 
 
 @dataclass(frozen=True)
@@ -20,3 +21,4 @@ class Services:
     packages: Packages
     folio: Folio
     passport: Passport
+    storage: Storage

@@ -1,4 +1,6 @@
 import asyncio
+from concurrent.futures import Executor
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol, final
 
@@ -16,13 +18,17 @@ from app.jobs.building import (
     Saving,
     Shelf,
 )
+from app.jobs.checking import Bound, Checking, Docket, Folder, Judges, Judging, Tabled
 from app.jobs.database import Sessions
 from app.jobs.folios import Folio
 from app.jobs.models import Declaration
 from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot
+from app.jobs.reporting import Reporting
+from app.jobs.versions import Versions
 from app.policy.package import Package
 from app.policy.schema.profile import Profile
+from app.storage.disk import Storage
 from app.storage.layout import Keys
 
 
@@ -92,36 +98,80 @@ class Profiled:
 
 
 @final
-class Standard:
-    """Pipelines of the service where the reading and the binding of a declaration are real and
-    the stages that check it are still empty."""
+@dataclass(frozen=True)
+class Kit:
+    """What the pipeline of a declaration takes from outside: the folder of the rule cards, the
+    storage of result files, the versions of a run, the source of the semantic judge
+    and the pool of threads that its calls run in."""
 
-    __slots__ = ("_bench", "_cards", "_folio", "_journal", "_sessions")
+    cards: Path
+    storage: Storage
+    versions: Versions
+    judges: Judges
+    pool: Executor
+
+
+@final
+class Standard:
+    """Pipelines of the service: a declaration is read, bound to a policy, checked by the rule
+    cards, given to the semantic judge and written to the result workbook.
+
+    The semantic judge comes from outside; the one that answers «требует проверки» without
+    calling a model is a valid choice until a real judge is connected.
+    """
+
+    __slots__ = ("_bench", "_folio", "_journal", "_kit", "_sessions")
 
     def __init__(
-        self, journal: Journal, folio: Folio, sessions: Sessions, bench: Bench, cards: Path
+        self, journal: Journal, folio: Folio, sessions: Sessions, bench: Bench, kit: Kit
     ) -> None:
         self._journal: Final = journal
         self._folio: Final = folio
         self._sessions: Final = sessions
         self._bench: Final = bench
-        self._cards: Final = cards
+        self._kit: Final = kit
 
     def stages(self, kind: str) -> tuple[Stage, ...]:
         if kind != "reconcile":
             raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
         policy: Shelf[str] = Shelf()
+        docket = Docket(Shelf(), Shelf(), Shelf(), Shelf())
+        cardfile = Folder(self._kit.cards)
         return (
             Ingesting(self._bench, self._sessions, policy, self._journal),
             *(Pending(name, self._journal) for name in ("fields", "normalize")),
             Binding(
-                Matching(self._sessions, Numbering(self._cards)),
+                Matching(self._sessions, Numbering(self._kit.cards)),
                 self._sessions,
                 policy,
                 self._journal,
             ),
             Profiled(self._folio, self._sessions),
-            *(Pending(name, self._journal) for name in ("check", "semantic", "report")),
+            Checking(
+                self._bench,
+                self._sessions,
+                (
+                    Bound(self._folio, self._sessions),
+                    cardfile,
+                    Tabled(self._sessions),
+                    self._kit.versions,
+                ),
+                docket,
+                self._journal,
+            ),
+            Judging(
+                (cardfile, Tabled(self._sessions), self._kit.judges),
+                self._kit.pool,
+                docket,
+                self._journal,
+            ),
+            Reporting(
+                (self._bench, self._kit.storage, Keys()),
+                self._sessions,
+                cardfile,
+                docket,
+                self._journal,
+            ),
         )
 
 

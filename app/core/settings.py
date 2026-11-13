@@ -19,6 +19,8 @@ class Settings(Protocol):
 
     def attempts(self) -> int: ...
 
+    def threads(self) -> int: ...
+
     def poll(self) -> float: ...
 
     def timeout(self) -> float: ...
@@ -71,6 +73,11 @@ class EnvSettings:
 
     def jobs(self) -> int:
         return self._environment.worker_max_jobs
+
+    def threads(self) -> int:
+        return self._environment.semantic_threads or (
+            self._environment.worker_max_jobs * self._environment.llm_max_concurrency
+        )
 
     def attempts(self) -> int:
         return self._environment.worker_max_attempts

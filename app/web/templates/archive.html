@@ -15,7 +15,7 @@
     <td>{{ row.declaration.file_name }}</td>
     <td>{{ row.declaration.number }}</td>
     <td>{{ row.declaration.month }}</td>
-    <td>{% with job = row.job, note = row.declaration.binding %}{% include "job.html" %}{% endwith %}</td>
+    <td>{% with job = row.job, note = row.declaration.binding, result = row.declaration.id %}{% include "job.html" %}{% endwith %}</td>
   </tr>
   {% endfor %}
   </tbody>
