@@ -28,12 +28,14 @@ type _Check = Literal[
     "exact", "fuzzy", "date_range", "lte_limit", "filled", "in_list", "conditional", "semantic"
 ]
 type _Status = Literal["match", "mismatch", "review"]
+type _Case = Literal["foreign", "fused", "latin", "unformed"]
 
 _STATUSES: Mapping[str, Status] = {"match": Match(), "mismatch": Mismatch(), "review": Review()}
 _GROUNDED = frozenset({"exact", "fuzzy", "date_range", "lte_limit", "in_list", "semantic"})
 _BRANCHES = frozenset({*_GROUNDED, "filled", *_STATUSES})
 _FORMS = frozenset({"vertical", "psg"})
 _MIXED = ".mixed"
+_CASES = frozenset({"foreign", "fused", "latin", "unformed"})
 
 
 class Form(BaseModel):
@@ -54,6 +56,7 @@ class Params(BaseModel):
     shape: Literal["", "party"] = ""
     legal_forms: tuple[str, ...] = ()
     foreign_forms: tuple[str, ...] = ()
+    party: dict[_Case, _Status] = Attribute(default_factory=dict)
     parts: tuple[Literal["number", "date"], ...] = ()
     ignore: tuple[str, ...] = ()
     synonyms: dict[str, str] = Attribute(default_factory=dict)
@@ -142,6 +145,10 @@ class Spec(BaseModel):
                 "shape party требует legal_forms",
                 self.params.shape == "party" and not self.params.legal_forms,
             ),
+            (
+                f"shape party требует статусы party для случаев {sorted(_CASES)}",
+                self.params.shape == "party" and bool(_CASES - set(self.params.party)),
+            ),
         )
         broken = [text for text, failed in problems if failed]
         if broken:
@@ -215,7 +222,11 @@ class Spec(BaseModel):
             ),
             "filled": lambda: Parts(
                 params.parts,
-                Party(params.legal_forms, params.foreign_forms)
+                Party(
+                    params.legal_forms,
+                    params.foreign_forms,
+                    {case: _STATUSES[status] for case, status in params.party.items()},
+                )
                 if params.shape == "party"
                 else Constant(Match(), "filled"),
             ),
