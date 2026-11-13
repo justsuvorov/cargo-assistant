@@ -17,10 +17,14 @@ from hamcrest import (
 
 from app.domain.errors import UnreadableError
 from app.domain.field import Blank
+from app.llm.deadline import Deadline
 from app.llm.errors import MisconfiguredError
 from app.llm.fake import FakeModel
 from app.llm.ledger import Memory, Route
+from app.llm.messages import Message
 from app.llm.model import Strict
+from app.llm.provider import Cut, Reply
+from app.llm.schema.shape import Shape
 from app.policy.approved import Approved
 from app.policy.extraction import Extraction
 from app.policy.package import Amendment, Paper
@@ -92,6 +96,13 @@ class Bundle:
 
     def problems(self) -> tuple[str, ...]:
         return self._rest.get("problems", ())
+
+
+class Clipped:
+    """Backend double whose every answer is cut by the token limit."""
+
+    def reply(self, _messages: tuple[Message, ...], _shape: Shape, _deadline: Deadline) -> Reply:
+        return Cut('{"passages": [{"key": "trans', (900, 4096))
 
 
 class Departure:
@@ -1434,6 +1445,16 @@ def test_stays_a_draft_when_the_model_does_not_answer() -> None:
         .problems[0],
         equal_to("Файл ГП: модель не ответила, документ не прочитан"),
         "Silence of the model is not recorded in problems",
+    )
+
+
+def test_stays_a_draft_when_the_answer_is_cut_by_the_token_limit() -> None:
+    assert_that(
+        Extraction(Bundle(Sheet("Полис")), Strict(Clipped(), Route("vsk", "m"), Memory(), 5.0))
+        .profile()
+        .problems[0],
+        equal_to("Файл ГП: ответ модели обрезан по пределу токенов, документ не прочитан"),
+        "Answer cut by the token limit is not recorded in problems",
     )
 
 

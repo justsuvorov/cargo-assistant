@@ -1,7 +1,7 @@
 from datetime import date
 from typing import Final, Literal, Protocol, final
 
-from app.llm.errors import MalformedError, UnavailableError
+from app.llm.errors import MalformedError, TruncatedError, UnavailableError
 from app.llm.messages import System, User
 from app.llm.model import Model
 from app.policy.extraction_text import Evidence, Original
@@ -322,6 +322,8 @@ class Asked:
             return Failed(
                 f"{label}: ответ модели дважды не прошёл проверку по схеме, документ не прочитан"
             )
+        except TruncatedError:
+            return Failed(f"{label}: ответ модели обрезан по пределу токенов, документ не прочитан")
 
 
 @final
