@@ -145,3 +145,31 @@ def test_limits_reasoning_of_gemini_by_thinking_config() -> None:
         equal_to({"google": {"thinking_config": {"thinking_budget": budget}}}),
         "Gemini reasoning is not limited by thinking_config",
     )
+
+
+def test_marks_completion_cut_by_token_limit_as_truncated() -> None:
+    cut = json.dumps(
+        {
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": '{"name": "Холо'},
+                    "finish_reason": "length",
+                }
+            ]
+        },
+        ensure_ascii=False,
+    )
+    with gateway([(200, cut, 0.0)]) as stub:
+        reply = Chat(endpoint(stub.url()), "m", 64, Prompted()).reply(
+            (User("q"),), Shape(Cargo), Countdown(5.0)
+        )
+    assert_that(reply.truncated(), equal_to(True), "Completion cut by length is not truncated")
+
+
+def test_completion_that_stopped_itself_is_whole() -> None:
+    with gateway([(200, completion("{}"), 0.0)]) as stub:
+        reply = Chat(endpoint(stub.url()), "m", 64, Prompted()).reply(
+            (User("q"),), Shape(Cargo), Countdown(5.0)
+        )
+    assert_that(reply.truncated(), equal_to(False), "Whole completion does not count as finished")

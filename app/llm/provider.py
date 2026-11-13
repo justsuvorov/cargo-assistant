@@ -16,10 +16,12 @@ class Reply(Protocol):
 
     def spent(self) -> tuple[int, int]: ...
 
+    def truncated(self) -> bool: ...
+
 
 @final
 class Answered:
-    """Reply as read from the answer body of a provider."""
+    """Reply as read from the answer body of a provider that finished on its own."""
 
     __slots__ = ("_spent", "_text")
 
@@ -32,6 +34,29 @@ class Answered:
 
     def spent(self) -> tuple[int, int]:
         return self._spent
+
+    def truncated(self) -> bool:
+        return False
+
+
+@final
+class Cut:
+    """Reply that a provider stopped at the token limit, so its text is only the beginning."""
+
+    __slots__ = ("_spent", "_text")
+
+    def __init__(self, text: str, spent: tuple[int, int]) -> None:
+        self._text: Final = text
+        self._spent: Final = spent
+
+    def text(self) -> str:
+        return self._text
+
+    def spent(self) -> tuple[int, int]:
+        return self._spent
+
+    def truncated(self) -> bool:
+        return True
 
 
 class Backend(Protocol):

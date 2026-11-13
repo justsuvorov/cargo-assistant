@@ -8,10 +8,13 @@ from concurrent.futures import ThreadPoolExecutor
 from hamcrest import assert_that, equal_to, less_than_or_equal_to, raises
 from pydantic import BaseModel
 
-from app.llm.errors import MalformedError, UnavailableError
+from app.llm.deadline import Deadline
+from app.llm.errors import MalformedError, TruncatedError, UnavailableError
 from app.llm.ledger import Memory, Route
 from app.llm.messages import Message, User
 from app.llm.model import Strict, Throttled
+from app.llm.provider import Cut, Reply
+from app.llm.schema.shape import Shape
 from tests.llm.answers import Sum
 from tests.llm.stub import Scripted
 
@@ -34,6 +37,17 @@ class Crowd:
         with self.lock:
             self.inside -= 1
         return schema.model_validate_json(json.dumps({"total": len(messages) + len(purpose)}))
+
+
+class Clipped:
+    """Backend double whose every answer is cut by the token limit."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def reply(self, _messages: tuple[Message, ...], _shape: Shape, _deadline: Deadline) -> Reply:
+        self.calls += 1
+        return Cut('{"total": 12', (5, 4))
 
 
 def test_returns_answer_as_schema_instance() -> None:
@@ -156,4 +170,35 @@ def test_lets_no_more_calls_run_at_once_than_semaphore_allows() -> None:
         tuple(pool.map(lambda _: model.answer("sum", (), Sum), range(8), timeout=5))
     assert_that(
         crowd.most, less_than_or_equal_to(limit), "Semaphore does not hold back extra calls"
+    )
+
+
+def test_fails_at_once_on_answer_cut_by_token_limit() -> None:
+    backend = Clipped()
+    with contextlib.suppress(TruncatedError):
+        Strict(backend, Route("vsk", "m"), Memory(), 5.0).answer("sum", (User("q"),), Sum)
+    assert_that(
+        backend.calls,
+        equal_to(1),
+        "Answer cut by the token limit does not fail without asking again",
+    )
+
+
+def test_raises_truncated_error_on_answer_cut_by_token_limit() -> None:
+    model = Strict(Clipped(), Route("vsk", "m"), Memory(), 5.0)
+    assert_that(
+        lambda: model.answer("sum", (User("q"),), Sum),
+        raises(TruncatedError),
+        "Answer cut by the token limit does not raise a truncated answer error",
+    )
+
+
+def test_records_cut_answer_as_invalid_with_its_tokens() -> None:
+    ledger = Memory()
+    with contextlib.suppress(TruncatedError):
+        Strict(Clipped(), Route("vsk", "m"), ledger, 5.0).answer("sum", (User("q"),), Sum)
+    assert_that(
+        [(call.outcome().valid(), call.outcome().spent()) for call in ledger.calls()],
+        equal_to([(False, (5, 4))]),
+        "Answer cut by the token limit is not recorded as invalid with its tokens",
     )
