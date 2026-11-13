@@ -106,6 +106,7 @@ check: date_range                 # exact | fuzzy | date_range | lte_limit | fil
 rule: "…"                         # правило словами; для semantic уходит в промпт
 params: {…}                       # параметры типа проверки
                                   #   date_range: bounds, extension, end_before_start (правило 6)
+                                  #   filled (shape: party): legal_forms, foreign_forms, party (правило 7)
 if_empty: mismatch                # match | mismatch | skip | review
 comments:                         # шаблоны: {reference}, {entry}, {amount}, {limit}, {policy_start}, {policy_end}
   match: "Входит в срок действия ГП"
@@ -140,6 +141,14 @@ clarify: […]                      # что уточнить у ФСЦ
    (ПСГ, `period_end`) берётся из строки перевозки. Окончание, равное началу, — не ошибка.
    Нераспознанные даты идут дальше по обычной цепочке и дают `unreadable` или `clause.*`.
    Проверка стоит после особых условий (правило 2).
+7. **Наименование с ОПФ (`filled`, `shape: party`, D-36).** Карточка задаёт `legal_forms`,
+   `foreign_forms` и `party` — статусы (`match | mismatch | review`) четырёх случаев:
+   `foreign` — иностранная ОПФ с наименованием; `fused` — ОПФ, слитая со следующим словом
+   без пробела (за ОПФ сразу идёт заглавная буква и строчная: «LLCAddress»); `latin` —
+   наименование без ОПФ, записанное только латиницей; `unformed` — любое другое наименование
+   без ОПФ. ОПФ из `legal_forms` с наименованием — «совпадает» (`filled`), ОПФ без
+   наименования — «не совпадает» (`incomplete`). Код причины — `<поле>.<случай>`, комментарий —
+   `comments.<случай>`, иначе шаблон статуса. Без всех четырёх статусов карточка не загружается.
 
 ## 4. Профиль полиса
 
