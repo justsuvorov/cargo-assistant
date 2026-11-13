@@ -16,6 +16,13 @@ class MalformedError(Exception):
 
 
 @final
+class TruncatedError(Exception):
+    """Answer of the model cut short by the token limit, so asking again would cut it again."""
+
+    __slots__ = ()
+
+
+@final
 class MisconfiguredError(Exception):
     """Settings of the model client that cannot work, found when the client is assembled."""
 

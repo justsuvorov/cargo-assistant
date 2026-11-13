@@ -7,7 +7,7 @@ from typing import Final, Protocol, final
 from pydantic import BaseModel, ValidationError
 
 from app.llm.deadline import Countdown, Deadline
-from app.llm.errors import MalformedError, UnavailableError
+from app.llm.errors import MalformedError, TruncatedError, UnavailableError
 from app.llm.ledger import Ledger, Logged, Measured, Origin
 from app.llm.messages import Assistant, Message, User
 from app.llm.provider import Backend
@@ -28,6 +28,7 @@ class Model(Protocol):
 class Strict:
     """Model that accepts only JSON valid against the schema: it removes reasoning and a fence
     around the whole answer, asks once more after an invalid answer and then fails loudly;
+    an answer cut by the token limit fails at once, because asking again would cut it again;
     every request is recorded in the ledger and all of them share one deadline."""
 
     __slots__ = ("_ledger", "_origin", "_provider", "_total")
@@ -100,10 +101,17 @@ class Strict:
                 self._origin,
                 digest,
                 Measured(
-                    reply.spent(), time.perf_counter() - started, valid=self._valid(text, schema)
+                    reply.spent(),
+                    time.perf_counter() - started,
+                    valid=not reply.truncated() and self._valid(text, schema),
                 ),
             )
         )
+        if reply.truncated():
+            raise TruncatedError(
+                f"Ответ модели на запрос {purpose} обрезан по пределу токенов LLM_MAX_TOKENS, "
+                f"получено токенов {reply.spent()[1]}"
+            )
         return text
 
     def _valid(self, text: str, schema: type[BaseModel]) -> bool:

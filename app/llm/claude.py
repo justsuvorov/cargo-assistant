@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from app.llm.deadline import Deadline
 from app.llm.errors import UnavailableError
 from app.llm.messages import Message
-from app.llm.provider import Answered, Reply
+from app.llm.provider import Answered, Cut, Reply
 from app.llm.schema.envelope import Envelope
 from app.llm.schema.shape import Shape
 from app.llm.wire import Endpoint
@@ -57,4 +57,4 @@ class Claude:
             raise UnavailableError(
                 f"Anthropic вернул ответ не в формате Messages API: {text[:300]}"
             ) from error
-        return Answered(envelope.text(), envelope.spent())
+        return (Cut if envelope.truncated() else Answered)(envelope.text(), envelope.spent())

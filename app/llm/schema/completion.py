@@ -12,6 +12,7 @@ class Choice(BaseModel):
     """One variant of an OpenAI-compatible answer."""
 
     message: Said = Field(default_factory=Said)
+    finish_reason: str | None = None
 
 
 class Usage(BaseModel):
@@ -30,6 +31,9 @@ class Completion(BaseModel):
 
     def text(self) -> str:
         return "".join(choice.message.content or "" for choice in self.choices[:1])
+
+    def truncated(self) -> bool:
+        return any(choice.finish_reason == "length" for choice in self.choices[:1])
 
     def spent(self) -> tuple[int, int]:
         usage = self.usage or Usage()

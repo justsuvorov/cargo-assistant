@@ -100,3 +100,29 @@ def test_keeps_instruction_first_in_system_field() -> None:
         starts_with("Ответь одним JSON-объектом"),
         "Schema instruction does not open the system field",
     )
+
+
+def test_marks_answer_cut_by_max_tokens_as_truncated() -> None:
+    cut = json.dumps(
+        {
+            "content": [{"type": "text", "text": '{"from": "Мос'}],
+            "usage": {"input_tokens": 3, "output_tokens": 256},
+            "stop_reason": "max_tokens",
+        },
+        ensure_ascii=False,
+    )
+    with gateway([(200, cut, 0.0)]) as stub:
+        reply = Claude(endpoint(stub.url()), "claude-x", 256, {}).reply(
+            (User("q"),), Shape(Journey), Countdown(5.0)
+        )
+    assert_that(reply.truncated(), equal_to(True), "Answer cut by max_tokens is not truncated")
+
+
+def test_answer_that_ended_its_turn_is_whole() -> None:
+    with gateway([(200, envelope("{}"), 0.0)]) as stub:
+        reply = Claude(endpoint(stub.url()), "claude-x", 256, {}).reply(
+            (User("q"),), Shape(Journey), Countdown(5.0)
+        )
+    assert_that(
+        reply.truncated(), equal_to(False), "Answer that ended its turn does not count as finished"
+    )

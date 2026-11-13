@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from app.llm.deadline import Deadline
 from app.llm.errors import UnavailableError
 from app.llm.messages import Message, System
-from app.llm.provider import Answered, Reply
+from app.llm.provider import Answered, Cut, Reply
 from app.llm.schema.completion import Completion
 from app.llm.schema.shape import Shape
 from app.llm.wire import Endpoint
@@ -148,4 +148,4 @@ class Chat:
             raise UnavailableError(
                 f"Шлюз вернул ответ не в формате chat completions: {text[:300]}"
             ) from error
-        return Answered(completion.text(), completion.spent())
+        return (Cut if completion.truncated() else Answered)(completion.text(), completion.spent())
