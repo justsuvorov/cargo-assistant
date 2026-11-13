@@ -20,3 +20,10 @@ class NotReadyError(Exception):
     """Profile that cannot be approved because requisites are missing or it is out of date."""
 
     __slots__ = ()
+
+
+@final
+class LostError(Exception):
+    """Attempt of a job that was stopped or taken away and so must write nothing."""
+
+    __slots__ = ()

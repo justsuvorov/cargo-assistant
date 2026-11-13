@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block content %}
+{% set colors = {"match": "#d6f0d6", "mismatch": "#f0d6d6", "review": "#fff3cd"} %}
+<h1>Результат проверки {{ declaration.number or declaration.file_name }}</h1>
+<p>
+  Версии: код {{ declaration.code_version or "—" }}, карточки {{ declaration.cards_version or "—" }}, профиль полиса {{ declaration.profile_version or "—" }}, промпты {{ declaration.prompts_version or "—" }}, модель {{ declaration.model or "—" }}.
+</p>
+<p>
+  Файл: {{ declaration.file_name }}.
+  {% if declaration.result_key %}<a href="/declarations/{{ declaration.id }}/file">Скачать результат (xlsx)</a>{% endif %}
+  Проверено мест: {{ declaration.places_answered }} из {{ declaration.places_expected }}.
+</p>
+<p>
+  Показать:
+  <a href="/declarations/{{ declaration.id }}">все</a>
+  {% for key, text in statuses.items() %}
+  | <a href="/declarations/{{ declaration.id }}?status={{ key }}">{{ text }} ({{ counts[key] }})</a>
+  {% endfor %}
+</p>
+{% if rows %}
+<table>
+  <thead>
+    <tr>
+      <th>Номер декларации/строки</th><th>Наименование поля в декларации</th>
+      <th>С каким пунктом Ген. полиса сверено</th><th>Результат проверки</th><th>Комментарий по сверке</th><th>Исправление эксперта</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td>{{ row.line }}</td>
+    <td>{{ titles[row.field][0] if row.field in titles else row.field }}</td>
+    <td>{{ titles[row.field][1] if row.field in titles else "" }}</td>
+    <td style="background: {{ colors[row.status] }}">{{ statuses[row.status] }}</td>
+    <td>{{ row.comment }}</td>
+    {% set fix = corrections.get((row.line, row.field)) %}
+    <td>
+      {% if fix %}
+      {{ statuses[fix.status] }} ({{ fix.author }}, {{ fix.created_at }}){% if fix.comment %}: {{ fix.comment }}{% endif %}
+      {% if fix.seen_status != row.status %}
+      <strong>Статус проверки изменился после исправления: был «{{ statuses[fix.seen_status] if fix.seen_status in statuses else fix.seen_status }}», стал «{{ statuses[row.status] }}»</strong>
+      {% endif %}
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Результатов пока нет.</p>
+{% endif %}
+{% endblock %}

@@ -13,6 +13,7 @@ def test_declares_all_tables_of_the_data_model() -> None:
                 "policy_profiles",
                 "declarations",
                 "check_results",
+                "corrections",
                 "rule_sets",
                 "jobs",
                 "eval_runs",
@@ -21,5 +22,5 @@ def test_declares_all_tables_of_the_data_model() -> None:
                 "job_runs",
             }
         ),
-        "Data model does not declare the eleven tables",
+        "Data model does not declare the twelve tables",
     )

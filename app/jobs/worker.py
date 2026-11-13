@@ -4,7 +4,7 @@ from typing import Final, Protocol, final
 
 from app.core.journal import Journal
 from app.core.settings import Settings
-from app.jobs.errors import WaitingError
+from app.jobs.errors import LostError, WaitingError
 from app.jobs.logbook import Failed, Logbook, Succeeded, TimedOut, Waited
 from app.jobs.queue import Jobs, Snapshot
 from app.jobs.stages import Pipelines
@@ -77,6 +77,8 @@ class Shift:
         await self._logbook.open(job_id)
         try:
             await asyncio.wait_for(self._stages(snapshot), self._settings.timeout())
+        except LostError as error:
+            self._journal.warning(f"Попытка прекращена: {error}", job_id, declaration)
         except WaitingError as error:
             await self._jobs.wait(job_id, str(error))
             await self._logbook.close(job_id, Waited())

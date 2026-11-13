@@ -1,9 +1,15 @@
+import asyncio
+import os
 import sqlite3
+import uuid
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.config import Config
 from hamcrest import assert_that, equal_to
+from sqlalchemy import inspect, make_url
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.jobs.models import Base
 
@@ -128,4 +134,72 @@ def test_generates_sql_with_build_job_of_policy_for_postgres(tmp_path: Path) -> 
         "ALTER TABLE policies ADD COLUMN job_id" in out.read_text(encoding="utf-8"),
         equal_to(True),
         "Offline migration does not add the build job to policies for Postgres",
+    )
+
+
+def sqlite_tables(path: Path) -> set[str]:
+    with sqlite3.connect(path) as connection:
+        return {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+
+
+def test_adds_versions_and_corrections_and_takes_them_away_on_downgrade(tmp_path: Path) -> None:
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))
+    config.set_main_option("sqlalchemy.url", f"sqlite+aiosqlite:///{tmp_path / 'v.db'}")
+    command.upgrade(config, "head")
+    up = sqlite_tables(tmp_path / "v.db")
+    command.downgrade(config, "0005")
+    down = sqlite_tables(tmp_path / "v.db")
+    command.upgrade(config, "head")
+    again = sqlite_tables(tmp_path / "v.db")
+    assert_that(
+        ("corrections" in up, "corrections" in down, again == up),
+        equal_to((True, False, True)),
+        "Migration does not go up, down and up again with the corrections table",
+    )
+
+
+async def round_trip(url: str) -> tuple[bool, bool]:
+    config = Config()
+    config.set_main_option("script_location", str(Path(__file__).parents[2] / "migrations"))
+    config.set_main_option("sqlalchemy.url", url)
+    await asyncio.to_thread(command.upgrade, config, "head")
+    await asyncio.to_thread(command.downgrade, config, "0005")
+    engine = create_async_engine(url)
+    async with engine.connect() as connection:
+        down = await connection.run_sync(lambda sync: inspect(sync).has_table("corrections"))
+    await engine.dispose()
+    await asyncio.to_thread(command.upgrade, config, "head")
+    engine = create_async_engine(url)
+    async with engine.connect() as connection:
+        up = await connection.run_sync(lambda sync: inspect(sync).has_table("corrections"))
+    await engine.dispose()
+    return down, up
+
+
+async def administer(statement: str) -> None:
+    engine = create_async_engine(os.environ["TEST_DATABASE_URL"], isolation_level="AUTOCOMMIT")
+    async with engine.connect() as connection:
+        await connection.exec_driver_sql(statement)
+    await engine.dispose()
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset")
+def test_goes_up_down_and_up_again_on_postgres() -> None:
+    name = f"t29_{uuid.uuid4().hex}"
+    base = os.environ["TEST_DATABASE_URL"]
+    asyncio.run(administer(f"CREATE DATABASE {name}"))
+    url = make_url(base).set(database=name).render_as_string(False)
+    try:
+        found = asyncio.run(asyncio.wait_for(round_trip(url), 120))
+    finally:
+        asyncio.run(administer(f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+    assert_that(
+        found,
+        equal_to((False, True)),
+        "Migration does not go down and up again on Postgres",
     )

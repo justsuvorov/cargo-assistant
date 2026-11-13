@@ -63,6 +63,8 @@ class Bench(Protocol):
 
     def copy(self, key: str) -> Path: ...
 
+    def scratch(self) -> Path: ...
+
     def warm(self, path: Path) -> None: ...
 
 
@@ -99,6 +101,11 @@ class Workbench:
             shutil.rmtree(folder, ignore_errors=True)
             raise
         return path
+
+    def scratch(self) -> Path:
+        work = self._home / "work"
+        work.mkdir(parents=True, exist_ok=True)
+        return Path(tempfile.mkdtemp(prefix="result-", dir=work))
 
     def warm(self, path: Path) -> None:
         with suppress(UnreadableError):

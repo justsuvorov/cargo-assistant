@@ -1,6 +1,16 @@
 from datetime import UTC, date, datetime
 
-from sqlalchemy import JSON, Date, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    JSON,
+    Date,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -98,12 +108,18 @@ class Declaration(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime)
     places_expected: Mapped[int] = mapped_column(Integer, default=0)
     places_answered: Mapped[int] = mapped_column(Integer, default=0)
+    code_version: Mapped[str] = mapped_column(String(64), default="")
+    cards_version: Mapped[str] = mapped_column(String(64), default="")
+    profile_version: Mapped[int] = mapped_column(Integer, default=0)
+    prompts_version: Mapped[str] = mapped_column(String(64), default="")
+    model: Mapped[str] = mapped_column(String(128), default="")
 
 
 class CheckResult(Base):
     """Verdict on one field of one declaration row, with its reason, clause and source."""
 
     __tablename__ = "check_results"
+    __table_args__ = (UniqueConstraint("declaration_id", "line", "field", name="uq_check_place"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     declaration_id: Mapped[int] = mapped_column(ForeignKey("declarations.id"), index=True)
@@ -116,6 +132,24 @@ class CheckResult(Base):
     source: Mapped[str] = mapped_column(String(8))
     correction: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True, default=utc)
+
+
+class Correction(Base):
+    """Correction of one check result by an expert; a new run of the job leaves it in place and
+    the status of the check that the expert saw stays next to it."""
+
+    __tablename__ = "corrections"
+    __table_args__ = (UniqueConstraint("declaration_id", "line", "field", name="uq_correction"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    declaration_id: Mapped[int] = mapped_column(ForeignKey("declarations.id"), index=True)
+    line: Mapped[str] = mapped_column(String(32))
+    field: Mapped[str] = mapped_column(String(64))
+    author: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    status: Mapped[str] = mapped_column(String(16))
+    seen_status: Mapped[str] = mapped_column(String(16), default="")
+    comment: Mapped[str] = mapped_column(Text, default="")
 
 
 class RuleSet(Base):

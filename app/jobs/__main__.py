@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import signal
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 
 from app.core.clock import Utc
@@ -8,6 +9,7 @@ from app.core.journal import LogJournal
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.building import Workbench
+from app.jobs.checking import Postponing, Unconfigured
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.gateway import Gateway, Tracked
@@ -15,7 +17,7 @@ from app.jobs.logbook import Careful, Journaled, Local
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.jobs.retention import Both, Cached, Monthly
-from app.jobs.stages import Building, Routed, Standard
+from app.jobs.stages import Building, Kit, Routed, Standard
 from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
 from app.llm.assembly import Configured
@@ -43,8 +45,24 @@ async def run() -> None:
         )
     )
     bench = Workbench(DiskStorage(settings.storage()), settings.soffice())
+    version = settings.version() or "dev"
+    stamp = Stamp(
+        version, Fingerprint(settings.cards()).hex(), settings.prompts(), settings.model()
+    )
     pipelines = Routed(
-        Standard(journal, folio, database, bench, settings.cards()),
+        Standard(
+            journal,
+            folio,
+            database,
+            bench,
+            Kit(
+                settings.cards(),
+                DiskStorage(settings.storage()),
+                stamp,
+                Unconfigured(Postponing()),
+                ThreadPoolExecutor(settings.threads(), thread_name_prefix="semantic"),
+            ),
+        ),
         Building(
             bench,
             folio,
@@ -53,15 +71,12 @@ async def run() -> None:
             journal,
         ),
     )
-    version = settings.version() or "dev"
     logbook = Careful(
         Journaled(
             database,
             Utc(),
             Local(version),
-            Stamp(
-                version, Fingerprint(settings.cards()).hex(), settings.prompts(), settings.model()
-            ),
+            stamp,
             Both(
                 Monthly(database, Utc(), settings.months()),
                 Cached(settings.soffice(), Utc(), settings.cache_days()),
