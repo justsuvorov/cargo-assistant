@@ -39,6 +39,8 @@ class Settings(Protocol):
 
     def development(self) -> bool: ...
 
+    def user(self) -> str: ...
+
     def issuer(self) -> str: ...
 
     def audience(self) -> str: ...
@@ -106,7 +108,10 @@ class EnvSettings:
         }.get(self._environment.llm_provider, self._environment.llm_model)
 
     def development(self) -> bool:
-        return self._environment.auth_dev_mode
+        return self._environment.auth_disabled or self._environment.auth_dev_mode
+
+    def user(self) -> str:
+        return self._environment.auth_dev_user_id
 
     def issuer(self) -> str:
         return f"{self._environment.keycloak_url}/realms/{self._environment.keycloak_realm}"

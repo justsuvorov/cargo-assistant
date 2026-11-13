@@ -213,7 +213,7 @@ def test_approves_profile_after_expert_fills_requisites(tmp_path: Path) -> None:
         approved = client.post("/policies/1/approve", params={"version": 2})
         html = client.get("/policies/1").text
     assert_that(
-        (approved.status_code, "подтверждён" in html, "developer" in html),
+        (approved.status_code, "подтверждён" in html, "Локальный пользователь" in html),
         equal_to((303, True, True)),
         "Approved profile does not keep its version and who approved it",
     )

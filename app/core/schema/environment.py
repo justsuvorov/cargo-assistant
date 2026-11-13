@@ -51,7 +51,9 @@ class Environment(BaseSettings):
     keycloak_role_user: str = "cargo_user"
     keycloak_role_expert: str = "cargo_expert"
     keycloak_role_admin: str = "cargo_admin"
+    auth_disabled: bool = False
     auth_dev_mode: bool = False
+    auth_dev_user_id: str = "dev-user"
 
     def __init__(self, file: str = "") -> None:
         super().__init__(_env_file=file or None)

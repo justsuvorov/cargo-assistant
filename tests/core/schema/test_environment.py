@@ -93,3 +93,21 @@ def test_reads_total_time_limit_of_model(tmp_path: Path) -> None:
         equal_to(limit),
         "Total time limit of the model is not read from the environment",
     )
+
+
+def test_keeps_login_enabled_by_default(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    assert_that(
+        Environment(str(tmp_path / ".env")).auth_disabled,
+        equal_to(False),
+        "Login is not enabled by default",
+    )
+
+
+def test_reads_switch_that_disables_login(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("AUTH_DISABLED=true\n", encoding="utf-8")
+    assert_that(
+        Environment(str(tmp_path / ".env")).auth_disabled,
+        equal_to(True),
+        "Switch that disables login is not read from the environment",
+    )
