@@ -14,6 +14,11 @@ _SCOPE = re.compile(
     rf"{_LEAD}(?P<list>{_ITEM}(?:\s*(?:,|;|и|and)\s*(?:{_SIGN})?\s*{_ITEM})*)?",
     re.IGNORECASE,
 )
+_ATTACHED = re.compile(
+    rf"(?:\bприложени\w*|\battachment|\bannex)\s*(?:{_SIGN})?\s*\d+\s*[-–—:]\s*"
+    rf"(?:деклараци\w*|declaration)\s*{_SIGN}\s*(?P<item>{_ITEM})",
+    re.IGNORECASE,
+)
 _EFFECT = re.compile(
     r"(?:вступает\s+в\s+силу|enters\s+into\s+force|comes\s+into\s+(?:force|effect))([^\n]*)",
     re.IGNORECASE,
@@ -31,6 +36,10 @@ class Agreed(Protocol):
 
     def scope(self) -> tuple[str, ...]: ...
 
+    def written(self) -> tuple[str, ...]: ...
+
+    def attached(self) -> tuple[str, ...]: ...
+
     def unclear(self) -> bool: ...
 
 
@@ -40,8 +49,9 @@ class Terms:
 
     The signing date stands on the first line after the title that does not name the policy.
     The entry into force is the first date after the words about it, before the words about
-    validity. The scope follows the words "under declarations". Whatever cannot be read stays
-    empty: a draft has no dates, and a scope with a blank declaration number is unclear.
+    validity. The scope follows the words "under declarations" and joins them with the
+    declarations that attachments name, once each. Whatever cannot be read stays empty: a draft has
+    no dates, and a scope with a blank declaration number is unclear.
     """
 
     __slots__ = ("_text",)
@@ -60,12 +70,18 @@ class Terms:
         return Stated(_VALIDITY.split(found[1], 1)[0] if found else "").dates()[:1]
 
     def scope(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(self.written() + self.attached()))
+
+    def written(self) -> tuple[str, ...]:
         return tuple(
             token
             for found in self._named()
             if found["list"]
             for token in _SEPARATOR.split(found["list"])
         )
+
+    def attached(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(found["item"] for found in _ATTACHED.finditer(self._text)))
 
     def unclear(self) -> bool:
         return any(not found["list"] for found in self._named())

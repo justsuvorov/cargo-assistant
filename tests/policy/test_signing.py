@@ -141,3 +141,35 @@ def test_amendment_without_declarations_concerns_the_whole_policy() -> None:
         contains_exactly(0),
         "Signing does not give an empty scope to an amendment that names no declaration",
     )
+
+
+def test_names_different_declarations_of_text_and_attachment() -> None:
+    text = (
+        _text() + "\nПриложение\n1. Приложение № 1 - Декларация № 528 об отгрузке от 06.07.2026 г."
+    )
+    outcome = Signing(Opened("ДС/a.docx", text)).survey()
+    assert_that(
+        (outcome.items()[0].scope(), outcome.problems()),
+        equal_to(
+            (
+                ("154", "528"),
+                (
+                    "ДС 4 (ДС/a.docx): в тексте названа декларация 154, а в приложении 528,"
+                    " ДС отнесено к обеим",
+                ),
+            )
+        ),
+        "Signing does not apply the amendment to both declarations and name the mismatch",
+    )
+
+
+def test_gives_no_problem_when_text_and_attachment_name_one_declaration() -> None:
+    text = (
+        _text() + "\nПриложение\n1. Приложение № 1 - Декларация № 154 об отгрузке от 06.07.2026 г."
+    )
+    outcome = Signing(Opened("ДС/a.docx", text)).survey()
+    assert_that(
+        (outcome.items()[0].scope(), outcome.problems()),
+        equal_to((("154",), ())),
+        "Signing does not give an empty problem list when text and attachment name one declaration",
+    )
