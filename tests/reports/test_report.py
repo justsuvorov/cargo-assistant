@@ -17,7 +17,7 @@ from app.rules.cards import Cards
 from app.rules.probe import Constant
 from app.rules.rows import Rowwise
 from app.rules.wording import Comments
-from tests.rules.fakes import Mute, Paper, Profile
+from tests.rules.fakes import Mute, Paper
 
 
 def _cards(form: str) -> tuple[Card, ...]:
@@ -217,7 +217,9 @@ def test_status_cells_are_coloured(tmp_path: Path) -> None:
 
 
 def test_mismatch_cell_is_red(tmp_path: Path) -> None:
-    report = Report(Paper("305", "psg", (_row("Бумага"),)), Vacant("1"), _cards("psg"), Stated((), ()))
+    report = Report(
+        Paper("305", "psg", (_row("Бумага"),)), Vacant("1"), _cards("psg"), Stated((), ())
+    )
     report.save(tmp_path / report.name())
     assert_that(
         load_workbook(tmp_path / report.name()).worksheets[0].cell(7, 4).fill.fgColor.rgb,

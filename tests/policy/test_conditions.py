@@ -43,7 +43,7 @@ def test_finds_conditions_of_policy_by_number_as_the_card_compares_it(tmp_path: 
     assert_that(
         [item.text() for item in found.items()],
         contains_exactly("Без франшизы"),
-        "SharedFile does not find the conditions of the policy by its number without spaces and signs",
+        "SharedFile does not find the conditions by the number without spaces and signs",
     )
 
 
@@ -153,7 +153,9 @@ def test_joined_puts_client_conditions_first(tmp_path: Path) -> None:
 
 
 def test_joined_keeps_problems_of_every_part(tmp_path: Path) -> None:
-    found = Joined((ClientFile(_Written(())), SharedFile(tmp_path / "x.xlsx", ("№",)))).find("1", "")
+    found = Joined((ClientFile(_Written(())), SharedFile(tmp_path / "x.xlsx", ("№",)))).find(
+        "1", ""
+    )
     assert_that(
         (found.items(), found.problems()),
         equal_to(

@@ -144,7 +144,10 @@ class Bench:
                 for pack, judged in zip(
                     packs,
                     pool.map(
-                        lambda pack: Errand(self._model, self._journal, pack, self._brief).verdicts(), packs
+                        lambda pack: Errand(
+                            self._model, self._journal, pack, self._brief
+                        ).verdicts(),
+                        packs,
                     ),
                     strict=True,
                 )

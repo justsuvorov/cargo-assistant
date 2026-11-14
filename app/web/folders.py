@@ -27,10 +27,9 @@ async def opened(files: list[UploadFile]) -> tuple[str, tuple[Stored, ...]]:
 async def chosen(files: list[UploadFile] | None) -> tuple[Stored, ...]:
     """Special conditions file of the client that a user chose apart from the folder, if any:
     a field left empty by the browser gives nothing, a path is cut to the name of the file."""
-    return tuple(
-        Blob(PurePosixPath(file.filename.replace("\\", "/")).name, data)
-        for file in (files or [])
-        if file.filename
-        for data in (await file.read(),)
-        if data
-    )
+    found: list[Stored] = []
+    for file in files or []:
+        data = await file.read()
+        if file.filename and data:
+            found.append(Blob(PurePosixPath(file.filename.replace("\\", "/")).name, data))
+    return tuple(found)

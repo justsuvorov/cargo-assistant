@@ -66,7 +66,7 @@ class Counting:
     def version(self) -> str:
         return "prompts-7"
 
-    def judge(self, _job_id: int) -> "Counting":
+    def judge(self, _job_id: int, _notes: tuple[str, ...]) -> "Counting":
         return self
 
     def verdicts(self, questions: tuple[Question, ...]) -> tuple[Verdict, ...]:
@@ -472,12 +472,12 @@ def test_gives_the_same_verdicts_through_the_stage_and_through_eval(tmp_path: Pa
 class Unreachable:
     """Judges of a process whose model gateway is not configured."""
 
-    def judge(self, job_id: int) -> Judge:
+    def judge(self, job_id: int, _notes: tuple[str, ...]) -> Judge:
         raise MisconfiguredError(f"Для задачи {job_id} не настроен шлюз модели")
 
 
 def test_falls_back_to_the_postponed_judge_when_the_gateway_is_not_configured() -> None:
-    judge = Unconfigured(Unreachable()).judge(random.randint(1, 99))
+    judge = Unconfigured(Unreachable()).judge(random.randint(1, 99), ())
     assert_that(
         (judge.version(), isinstance(judge, Postponed)),
         equal_to(("none", True)),

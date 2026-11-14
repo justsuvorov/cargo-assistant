@@ -1,7 +1,7 @@
 import asyncio
 import contextvars
 from concurrent.futures import Executor
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final, Protocol, final
 
@@ -31,6 +31,7 @@ from app.jobs.checking import (
     Judging,
     Tabled,
 )
+from app.jobs.conditioning import Conditioning
 from app.jobs.database import Sessions
 from app.jobs.errors import MissingProfileError, WaitingError
 from app.jobs.folios import Folio
@@ -41,6 +42,7 @@ from app.jobs.reporting import Reporting
 from app.jobs.versions import Versions
 from app.llm.messages import Message
 from app.llm.model import Model
+from app.policy.conditions import SharedFile, SpecialConditions
 from app.policy.package import Package
 from app.policy.schema.profile import Profile
 from app.semantic import bench
@@ -176,15 +178,16 @@ class Benches:
         self._packs: Final = packs
         self._size: Final = size
 
-    def judge(self, job_id: int) -> Judge:
+    def judge(self, job_id: int, notes: tuple[str, ...]) -> Judge:
         return Briefed(
             bench.Bench(
                 Situated(self._models.model(job_id), contextvars.copy_context()),
                 self._journal,
                 self._packs,
                 self._size,
+                notes,
             ),
-            Brief(),
+            Brief(notes),
         )
 
 
@@ -193,13 +196,15 @@ class Benches:
 class Kit:
     """What the pipeline of a declaration takes from outside: the folder of the rule cards, the
     storage of result files, the versions of a run, the source of the semantic judge
-    and the pool of threads that its calls run in."""
+    and the pool of threads that its calls run in; the shared file of special conditions is
+    not configured unless it is given."""
 
     cards: Path
     storage: Storage
     versions: Versions
     judges: Judges
     pool: Executor
+    shared: SpecialConditions = field(default_factory=lambda: SharedFile(Path(""), ()))
 
 
 @final
@@ -225,7 +230,7 @@ class Standard:
     def stages(self, kind: str) -> tuple[Stage, ...]:
         if kind != "reconcile":
             raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
-        docket = Docket(Shelf(), Shelf(), Shelf(), Shelf(), Shelf())
+        docket = Docket(Shelf(), Shelf(), Shelf(), Shelf(), Shelf(), Shelf())
         cardfile = Folder(self._kit.cards)
         return (
             Ingesting(self._bench, self._sessions, self._journal),
@@ -242,6 +247,12 @@ class Standard:
                     self._kit.versions,
                 ),
                 docket,
+                self._journal,
+            ),
+            Conditioning(
+                self._sessions,
+                self._kit.shared,
+                (docket.declaration, docket.taken, docket.conditions),
                 self._journal,
             ),
             Judging(

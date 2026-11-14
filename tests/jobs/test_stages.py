@@ -176,7 +176,7 @@ class Unreachable:
 
 
 def test_judges_semantic_questions_on_the_model_gateway_with_the_version_of_the_prompt() -> None:
-    judge = Benches(Answering(), Silent(), 1, 40).judge(random.randint(1, 99))
+    judge = Benches(Answering(), Silent(), 1, 40).judge(random.randint(1, 99), ())
     verdict = judge.verdicts(
         (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы, кроме меха"), "правило"),)
     )[0]
@@ -188,7 +188,7 @@ def test_judges_semantic_questions_on_the_model_gateway_with_the_version_of_the_
 
 
 def test_postpones_semantic_questions_when_the_gateway_is_not_configured() -> None:
-    judge = Unconfigured(Benches(Unreachable(), Silent(), 1, 40)).judge(random.randint(1, 99))
+    judge = Unconfigured(Benches(Unreachable(), Silent(), 1, 40)).judge(random.randint(1, 99), ())
     assert_that(
         (judge.version(), isinstance(judge, Postponed)),
         equal_to(("none", True)),
@@ -228,7 +228,7 @@ class Marking:
 def test_books_a_semantic_call_in_another_thread_under_the_job() -> None:
     model = Peeking()
     job = random.randint(1, 99)
-    judge = contextvars.copy_context().run(Benches(Marking(model), Silent(), 1, 40).judge, job)
+    judge = contextvars.copy_context().run(Benches(Marking(model), Silent(), 1, 40).judge, job, ())
     with ThreadPoolExecutor(1) as pool:
         pool.submit(
             judge.verdicts,

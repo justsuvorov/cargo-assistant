@@ -3,7 +3,7 @@ import hashlib
 import shutil
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, Final, Protocol, final
+from typing import Final, Protocol, final
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
 from app.jobs.building import Bench
-from app.jobs.clients import Clients
+from app.jobs.clients import Clients, Kept
 from app.jobs.database import Sessions
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
 from app.jobs.inventory import Inventory
@@ -30,7 +30,7 @@ class Surveyed:
 
     declarations: tuple[str, ...]
     signature: str
-    conditions: dict[str, Any]
+    conditions: Kept
 
 
 class Workspaces(Protocol):
@@ -110,7 +110,10 @@ class Filing:
                 )
                 row.found = list(surveyed.declarations)
                 row.package_sha = surveyed.signature
-                row.client_conditions = surveyed.conditions
+                row.client_file = surveyed.conditions.file()
+                row.client_chosen = surveyed.conditions.chosen()
+                row.client_lines = list(surveyed.conditions.lines())
+                row.client_problems = list(surveyed.conditions.problems())
                 await session.commit()
             except Exception:
                 for key in keys:
@@ -155,7 +158,7 @@ class Filing:
             return Surveyed(
                 inventory.declarations(),
                 inventory.signature(),
-                Clients(folder, own).record(),
+                Kept(Clients(folder, own)),
             )
         finally:
             shutil.rmtree(folder, ignore_errors=True)
