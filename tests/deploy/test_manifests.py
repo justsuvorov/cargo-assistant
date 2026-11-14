@@ -1,12 +1,55 @@
+import json
 from pathlib import Path
 
+import yaml
 from hamcrest import assert_that, contains_string, equal_to, has_items
 
-from app.core.manifests import Folder
-
 root = Path(__file__).parents[2]
-manifests = Folder(root, "deploy/k8s")
 pod = "spec.template.spec.containers.0"
+
+
+def documents() -> tuple[str, ...]:
+    return tuple(
+        json.dumps(document)
+        for path in sorted((root / "deploy/k8s").glob("*.yaml"))
+        if path.name != "secret.yaml"
+        for document in yaml.safe_load_all(path.read_text(encoding="utf-8"))
+        if document
+    )
+
+
+def found(kind: str, name: str) -> str:
+    return next(
+        text
+        for text in documents()
+        if json.loads(text)["kind"] == kind and name in ("", json.loads(text)["metadata"]["name"])
+    )
+
+
+def node(kind: str, name: str, path: str) -> str:
+    current = json.loads(found(kind, name))
+    for step in path.split("."):
+        current = current[int(step) if step.isdigit() else step]
+    return json.dumps(current)
+
+
+class Manifests:
+    """Release files of the repository, asked about as one set of Kubernetes objects."""
+
+    def kinds(self) -> frozenset[str]:
+        return frozenset(str(json.loads(text)["kind"]) for text in documents())
+
+    def value(self, kind: str, name: str, path: str) -> str:
+        return str(json.loads(node(kind, name, path)))
+
+    def names(self, kind: str, name: str, path: str) -> tuple[str, ...]:
+        return tuple(str(key) for key in json.loads(node(kind, name, path)))
+
+    def text(self, path: str) -> str:
+        return (root / path).read_text(encoding="utf-8")
+
+
+manifests = Manifests()
 
 
 def test_describes_every_kind_the_contour_needs() -> None:
