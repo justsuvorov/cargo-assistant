@@ -58,6 +58,7 @@ class Environment(BaseSettings):
     session_secure: bool = True
     session_hours: PositiveInt = 12
     app_base_url: str = ""
+    special_conditions_path: str = ""
     auth_disabled: bool = False
     auth_dev_mode: bool = False
     auth_dev_user_id: str = "dev-user"
