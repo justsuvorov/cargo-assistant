@@ -7,6 +7,7 @@ from app.domain.field import Field
 from app.domain.policy import Policy
 from app.domain.shipment import Shipment
 from app.domain.status import Match, Mismatch, Review
+from app.rules.numbers import Numbered
 from app.rules.outcome import Finding, Outcome, Worst
 
 
@@ -32,16 +33,10 @@ class Exact:
         )
 
     def _number(self, field: Field, clause: Clause, values: Mapping[str, str]) -> Outcome:
-        number = re.sub(r"\s", "", self._stripped(clause.text()))
-        words = self._stripped(field.text()).split()
-        runs = {
-            "".join(words[start:end])
-            for start in range(len(words))
-            for end in range(start + 1, len(words) + 1)
-        }
-        if not number:
+        numbers = Numbered(self._ignore)
+        if numbers.blank(clause.text()):
             return Finding(Review(), "unreadable", values)
-        return self._verdict(values, same=number in runs)
+        return self._verdict(values, same=numbers.same(field.text(), clause.text()))
 
     def _date(self, field: Field, clause: Clause, values: Mapping[str, str]) -> Outcome:
         if not field.dates() or not clause.dates():

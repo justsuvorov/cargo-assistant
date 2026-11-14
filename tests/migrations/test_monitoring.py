@@ -416,7 +416,7 @@ def test_counts_users_uploads_declarations_and_shipments_by_day_and_week() -> No
             job(1, user="u1"),
             job(2, user="u1"),
             job(3, user="u2"),
-            "INSERT INTO declarations (access_group, file_name, file_key, number, form, shipments,"
+            "INSERT INTO declarations (owner, file_name, file_key, number, form, shipments,"
             f" month, result_key, created_at, places_expected, places_answered) VALUES ('g', 'n',"
             f" '', '', '', 5, '', '', {ago(7200)}, 0, 0)",
         )
@@ -568,7 +568,7 @@ def test_exposes_no_error_text_file_name_or_field_value_in_any_view() -> None:
             attempt(
                 1, 1, outcome="error", error_class="KeyError", error_text=marker, finished=ago(5)
             ),
-            "INSERT INTO declarations (access_group, file_name, file_key, number, form, shipments,"
+            "INSERT INTO declarations (owner, file_name, file_key, number, form, shipments,"
             f" month, result_key, created_at, places_expected, places_answered) VALUES ('g',"
             f" '{marker}', '{marker}', '{marker}', '', 1, '', '', {ago(60)}, 0, 0)",
             "INSERT INTO check_results (declaration_id, line, field, status, reason, clause,"
