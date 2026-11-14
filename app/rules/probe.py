@@ -1,12 +1,12 @@
 from typing import Final, Protocol, final
 
 from app.domain.clause import Clause
-from app.domain.errors import UnreadableError
+from app.domain.errors import UnboundError, UnreadableError
 from app.domain.field import Field
 from app.domain.policy import Policy
 from app.domain.shipment import Shipment
 from app.domain.status import Match, Status
-from app.rules.outcome import Doubt, Finding, Gap, Outcome
+from app.rules.outcome import Doubt, Finding, Gap, Outcome, Severed
 from app.rules.presence import Stated
 from app.rules.tokens import Tokens
 
@@ -28,7 +28,8 @@ class Measure(Protocol):
 @final
 class Doubted:
     """Probe that asks a person when a value it needs cannot be read, such as a policy clause
-    whose revision cannot be chosen, whatever step of the inner probe found that out."""
+    whose revision cannot be chosen or a clause of a declaration bound to no policy, whatever
+    step of the inner probe found that out."""
 
     __slots__ = ("_probe",)
 
@@ -40,6 +41,8 @@ class Doubted:
             return self._probe.outcome(field, shipment, policy)
         except UnreadableError as error:
             return Doubt(str(error))
+        except UnboundError as error:
+            return Severed(str(error))
 
 
 @final
@@ -64,7 +67,8 @@ class Emptied:
 @final
 class Accepted:
     """Probe that matches a field whose value the special conditions of the client accept,
-    found in the clause accepted.<field>, and runs the inner probe otherwise."""
+    found in the clause accepted.<field>, and runs the inner probe otherwise; a declaration
+    bound to no policy has no special conditions, so the inner probe decides alone."""
 
     __slots__ = ("_key", "_probe")
 
@@ -73,7 +77,10 @@ class Accepted:
         self._probe: Final = probe
 
     def outcome(self, field: Field, shipment: Shipment, policy: Policy) -> Outcome:
-        clause = policy.clause(f"accepted.{self._key}", shipment)
+        try:
+            clause = policy.clause(f"accepted.{self._key}", shipment)
+        except UnboundError:
+            return self._probe.outcome(field, shipment, policy)
         value = Tokens(field.text(), {})
         if any(Tokens(entry, {}).same(value) for entry in (*clause.entries(), clause.text())):
             return Finding(

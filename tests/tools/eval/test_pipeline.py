@@ -57,7 +57,11 @@ def _cards(folder: Path) -> Deck:
 
 def _rules(folder: Path) -> Path:
     folder.mkdir()
-    comments = 'comments: {match: "Заполнено", mismatch: "Пусто", review: "Проверить"}\n'
+    comments = (
+        'comments: {match: "Заполнено", mismatch: "Пусто", review: "Проверить", '
+        'policy_missing: "Нет номера", policy_unreadable: "Номер не распознан", '
+        'policy_unknown: "Полис не найден", policy_ambiguous: "Полисов несколько"}\n'
+    )
     (folder / "cargo.yaml").write_text(
         "field: cargo\nforms:\n  psg: {order: 5, title: Наименование груза}\n"
         "subject: Груз\nclause: none\ncheck: filled\nrule: Поле заполнено\n"
@@ -114,7 +118,7 @@ def test_checked_decides_by_rule_cards(tmp_path: Path) -> None:
     )
 
 
-def test_checked_asks_person_where_policy_profile_is_vacant(tmp_path: Path) -> None:
+def test_checked_asks_person_where_no_policy_is_known(tmp_path: Path) -> None:
     _declaration(tmp_path / "real" / "35.xlsx", 1, str(random.randint(1000, 90000)))
     assert_that(
         [
@@ -124,8 +128,8 @@ def test_checked_asks_person_where_policy_profile_is_vacant(tmp_path: Path) -> N
             .verdicts()
             if verdict.place().field() == "sum"
         ],
-        contains_exactly("clause.absent"),
-        "Checked does not ask a person where the policy profile is vacant",
+        contains_exactly("policy.unknown"),
+        "Checked does not ask a person with the code policy.unknown where no policy is known",
     )
 
 

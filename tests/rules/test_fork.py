@@ -1,9 +1,9 @@
 from hamcrest import assert_that, equal_to, raises
 
 from app.declarations.schema import Fields
-from app.domain.errors import UnreadableError
+from app.domain.errors import UnboundError, UnreadableError
 from app.domain.place import Spot
-from app.domain.policy import Policy, Vacant
+from app.domain.policy import Policy, Unbound, Vacant
 from app.domain.status import Match, Mismatch
 from app.rules.answers import Replies
 from app.rules.fork import Flag, Fork, Mixed
@@ -38,6 +38,15 @@ def test_flag_refuses_to_answer_when_the_policy_cannot_choose() -> None:
         lambda: Flag("carrier_risk").holds(shipment, Doubtful("редакция не выбрана")),
         raises(UnreadableError),
         "Flag does not refuse to answer when the policy cannot choose",
+    )
+
+
+def test_flag_refuses_to_answer_when_the_declaration_is_bound_to_no_policy() -> None:
+    shipment = Paper("4", "vertical", ({},)).shipments()[0]
+    assert_that(
+        lambda: Flag("carrier_risk").holds(shipment, Unbound("policy_unknown", "1")),
+        raises(UnboundError, "policy_unknown"),
+        "Flag does not refuse to answer when the declaration is bound to no policy",
     )
 
 

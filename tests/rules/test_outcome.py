@@ -1,3 +1,4 @@
+import random
 import uuid
 
 from hamcrest import assert_that, equal_to
@@ -10,7 +11,7 @@ from app.domain.semantics import Inquiry
 from app.domain.status import Match, Mismatch, Review
 from app.domain.verdict import Ruling
 from app.rules.answers import Replies
-from app.rules.outcome import Doubt, Finding, Gap, Pending, Worst
+from app.rules.outcome import Doubt, Finding, Gap, Pending, Severed, Worst
 from app.rules.wording import Comments
 
 
@@ -158,4 +159,38 @@ def test_doubt_asks_the_semantic_judge_nothing() -> None:
         Doubt(uuid.uuid4().hex).questions(Spot("2", "cargo")),
         equal_to(()),
         "Doubt does not stay away from the semantic judge",
+    )
+
+
+def test_severed_needs_a_person_with_the_code_of_its_binding() -> None:
+    reason = random.choice(("missing", "unreadable", "unknown", "ambiguous"))
+    verdict = Severed(f"policy_{reason}").verdict(Spot("3", "sum"), Comments({}), Replies((), ()))
+    assert_that(
+        (verdict.status().key(), verdict.reason().code(), verdict.reason().source()),
+        equal_to(("review", f"policy.{reason}", "rule")),
+        "Severed does not need a person with the code of its binding",
+    )
+
+
+def test_severed_takes_the_comment_of_its_reason_from_the_card() -> None:
+    comment = uuid.uuid4().hex
+    assert_that(
+        Severed("policy_unknown")
+        .verdict(
+            Spot("3", "sum"),
+            Comments({"policy_unknown": comment, "review": "Другое"}),
+            Replies((), ()),
+        )
+        .remark()
+        .comment(),
+        equal_to(comment),
+        "Severed does not take the comment of its reason from the card",
+    )
+
+
+def test_severed_asks_the_semantic_judge_nothing() -> None:
+    assert_that(
+        Severed("policy_missing").questions(Spot("3", "cargo")),
+        equal_to(()),
+        "Severed does not stay away from the semantic judge",
     )

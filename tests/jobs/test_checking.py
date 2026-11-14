@@ -462,3 +462,25 @@ def test_falls_back_to_the_postponed_judge_when_the_gateway_is_not_configured() 
         equal_to(("none", True)),
         "Missing gateway does not leave the postponed judge with the version none",
     )
+
+
+async def unbound_reasons(folder: Path) -> tuple[str, ...]:
+    stand = Stand(folder, Counting(), "ru", word(), bound=False)
+    try:
+        await stand.prepare()
+        await stand.drain()
+        async with stand.database.session() as session:
+            rows = (await session.scalars(select(CheckResult))).all()
+        return tuple(sorted({row.reason for row in rows if row.field in {"sum", "insurer"}}))
+    finally:
+        await stand.close()
+
+
+def test_asks_a_person_with_the_reason_of_the_binding_for_an_unbound_declaration(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(unbound_reasons(tmp_path), 120)),
+        equal_to(("policy.unknown",)),
+        "Unbound declaration does not get the code of its binding in cards with a policy clause",
+    )

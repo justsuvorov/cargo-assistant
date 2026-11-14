@@ -1,22 +1,32 @@
 import asyncio
+import contextvars
+import random
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 from pathlib import Path
 
 from hamcrest import assert_that, equal_to, raises
+from pydantic import BaseModel
 
 from app.core.clock import Utc
+from app.domain.place import Spot
+from app.domain.semantics import Inquiry
 from app.jobs.building import Workbench
-from app.jobs.checking import Postponing
+from app.jobs.checking import Postponed, Postponing, Unconfigured
 from app.jobs.database import Database
 from app.jobs.errors import WaitingError
 from app.jobs.folios import Folios
 from app.jobs.models import Base, Declaration, Policy
 from app.jobs.queue import Queue, Snapshot
-from app.jobs.stages import Kit, Profiled, Routed, Standard, UnknownKindError
+from app.jobs.stages import Benches, Kit, Profiled, Routed, Standard, UnknownKindError
 from app.jobs.versions import Stamp
+from app.llm.errors import MisconfiguredError
+from app.llm.fake import FakeModel
+from app.llm.messages import Message
+from app.llm.model import Model
 from app.policy.schema.profile import Profile
 from app.storage.disk import DiskStorage
+from tests.rules.fakes import Text
 
 
 class Silent:
@@ -129,4 +139,86 @@ def test_refuses_kind_that_no_pipeline_knows(tmp_path: Path) -> None:
         lambda: asyncio.run(asyncio.wait_for(asks_pipelines_for_other_kind(tmp_path), 30)),
         raises(UnknownKindError),
         "Kind without a pipeline is not refused",
+    )
+
+
+class Answering:
+    """Models whose model answers every semantic question about cargo with a mismatch."""
+
+    def model(self, _job_id: int) -> Model:
+        return FakeModel(
+            {"semantic.cargo": '{"answers": [{"id": 1, "status": "mismatch", "comment": "нет"}]}'}
+        )
+
+
+class Unreachable:
+    """Models of a process whose model gateway is not configured."""
+
+    def model(self, job_id: int) -> Model:
+        raise MisconfiguredError(f"Для задачи {job_id} не настроен шлюз модели")
+
+
+def test_judges_semantic_questions_on_the_model_gateway_with_the_version_of_the_prompt() -> None:
+    judge = Benches(Answering(), Silent(), 1, 40).judge(random.randint(1, 99))
+    verdict = judge.verdicts(
+        (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы, кроме меха"), "правило"),)
+    )[0]
+    assert_that(
+        (judge.version(), verdict.status().key(), verdict.reason().source()),
+        equal_to(("semantic-1", "mismatch", "llm")),
+        "Benches does not judge on the model gateway with the version of the prompt",
+    )
+
+
+def test_postpones_semantic_questions_when_the_gateway_is_not_configured() -> None:
+    judge = Unconfigured(Benches(Unreachable(), Silent(), 1, 40)).judge(random.randint(1, 99))
+    assert_that(
+        (judge.version(), isinstance(judge, Postponed)),
+        equal_to(("none", True)),
+        "Benches without a configured gateway does not fall back to the postponed judge",
+    )
+
+
+_JOB: contextvars.ContextVar[int] = contextvars.ContextVar("job", default=0)
+
+
+class Peeking:
+    """Model that answers every cargo question with a match and remembers the job it saw."""
+
+    def __init__(self) -> None:
+        self.seen: list[int] = []
+
+    def answer[T: BaseModel](
+        self, purpose: str, messages: tuple[Message, ...], schema: type[T]
+    ) -> T:
+        self.seen.append(_JOB.get())
+        return FakeModel(
+            {"semantic.cargo": '{"answers": [{"id": 1, "status": "match", "comment": "да"}]}'}
+        ).answer(purpose, messages, schema)
+
+
+class Marking:
+    """Models that mark the context of the caller with the job, like the model gateway."""
+
+    def __init__(self, model: Peeking) -> None:
+        self._model = model
+
+    def model(self, job_id: int) -> Model:
+        _JOB.set(job_id)
+        return self._model
+
+
+def test_books_a_semantic_call_in_another_thread_under_the_job() -> None:
+    model = Peeking()
+    job = random.randint(1, 99)
+    judge = contextvars.copy_context().run(Benches(Marking(model), Silent(), 1, 40).judge, job)
+    with ThreadPoolExecutor(1) as pool:
+        pool.submit(
+            judge.verdicts,
+            (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы"), "правило"),),
+        ).result(timeout=10)
+    assert_that(
+        model.seen,
+        equal_to([job]),
+        "Semantic call made in another thread is not booked under its job",
     )

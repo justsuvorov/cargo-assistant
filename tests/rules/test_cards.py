@@ -7,11 +7,20 @@ from pathlib import Path
 from hamcrest import assert_that, contains_string, equal_to, has_item, raises
 
 from app.domain.money import Amount
-from app.domain.policy import Policy, Vacant
+from app.domain.policy import Policy, Unbound, Vacant
 from app.domain.status import Match
 from app.rules.cards import Cards
 from app.rules.errors import CardError
-from tests.rules.fakes import Doubtful, Mute, Oracle, Paper, Profile, Text, Unsettled
+from tests.rules.fakes import (
+    Doubtful,
+    Listening,
+    Mute,
+    Oracle,
+    Paper,
+    Profile,
+    Text,
+    Unsettled,
+)
 
 
 def _folder() -> Path:
@@ -495,4 +504,117 @@ def test_party_card_without_statuses_of_its_cases_fails_loudly(tmp_path: Path) -
         lambda: Cards(folder, Mute()).cards("vertical"),
         raises(CardError, "party"),
         "Cards does not reject a party card without the statuses of its cases",
+    )
+
+
+def _full(form: str) -> Paper:
+    return Paper(
+        "25",
+        form,
+        (
+            {
+                **_row("Бумага", "Авто+авиа", "г. Третий"),
+                "period": ("с 14.09.2026 по 30.09.2026",),
+                "document": ("CMR 1 от 14.09.2026",),
+                "carrier": ("ООО «Перевозчик»",),
+                "packaging": ("Коробки",),
+                "sealing": ("Пломба 1",),
+                "other": ("Без особенностей",),
+            },
+        ),
+    )
+
+
+def _asking(form: str) -> tuple[str, ...]:
+    asking = []
+    for card in Cards(_folder(), Mute()).cards(form):
+        listening = Listening()
+        card.verdicts(_full(form), listening)
+        if any(not key.startswith("accepted.") for key in listening.keys):
+            asking.append(card.field())
+    return tuple(asking)
+
+
+def _unbound(form: str, reason: str) -> dict[str, tuple[tuple[str, str], ...]]:
+    return {
+        card.field(): tuple(
+            (verdict.status().key(), verdict.reason().code())
+            for verdict in card.verdicts(_full(form), Unbound(reason, "1"))
+        )
+        for card in Cards(_folder(), Oracle(Match())).cards(form)
+    }
+
+
+def test_card_with_a_policy_clause_never_matches_a_declaration_bound_to_no_policy() -> None:
+    reasons = ("policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous")
+    matched = tuple(
+        (form, reason, field)
+        for form in ("vertical", "psg")
+        for reason in reasons
+        for field, found in _unbound(form, reason).items()
+        if field in _asking(form) and any(status == "match" for status, _ in found)
+    )
+    assert_that(
+        (bool(_asking("vertical")), bool(_asking("psg")), matched),
+        equal_to((True, True, ())),
+        "Card that asks a policy clause matches a declaration bound to no policy",
+    )
+
+
+def test_card_with_a_policy_clause_names_the_binding_for_a_declaration_bound_to_no_policy() -> None:
+    reason = random.choice(("missing", "unreadable", "unknown", "ambiguous"))
+    found = _unbound("vertical", f"policy_{reason}")
+    assert_that(
+        {found[field] for field in _asking("vertical")},
+        equal_to({(("review", f"policy.{reason}"),)}),
+        "Card that asks a policy clause does not name the binding of an unbound declaration",
+    )
+
+
+def test_card_without_a_policy_clause_works_as_before_for_a_declaration_bound_to_no_policy() -> (
+    None
+):
+    unbound = _unbound("vertical", "policy_unknown")
+    assert_that(
+        {
+            card.field(): tuple(
+                (verdict.status().key(), verdict.reason().code())
+                for verdict in card.verdicts(_full("vertical"), Vacant("1"))
+            )
+            for card in Cards(_folder(), Mute()).cards("vertical")
+            if card.field() not in _asking("vertical")
+        },
+        equal_to(
+            {field: found for field, found in unbound.items() if field not in _asking("vertical")}
+        ),
+        "Card without a policy clause does not work as before for an unbound declaration",
+    )
+
+
+def test_comment_of_an_unbound_declaration_comes_from_the_card() -> None:
+    card = next(card for card in Cards(_folder(), Mute()).cards("psg") if card.field() == "sum")
+    assert_that(
+        len(
+            {
+                card.verdicts(_full("psg"), Unbound(reason, "1"))[0].remark().comment()
+                for reason in (
+                    "policy_missing",
+                    "policy_unreadable",
+                    "policy_unknown",
+                    "policy_ambiguous",
+                )
+            }
+            - {""}
+        ),
+        equal_to(4),
+        "Card does not give its own comment for each reason of a missing binding",
+    )
+
+
+def test_card_with_a_clause_without_comments_of_the_binding_fails_loudly(tmp_path: Path) -> None:
+    folder = _card(tmp_path, "insurer", {"clause": "insurer", "check": "fuzzy"})
+    assert_that(
+        lambda: Cards(folder, Mute()).cards("vertical"),
+        raises(CardError, "policy_unknown"),
+        "Cards does not reject a card with a clause but without comments for an unbound policy",
     )

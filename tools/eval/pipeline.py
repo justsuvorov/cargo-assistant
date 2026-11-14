@@ -7,7 +7,7 @@ from app.declarations.declared import Declared
 from app.domain.declaration import Declaration
 from app.domain.errors import UnreadableError
 from app.domain.place import Spot
-from app.domain.policy import Vacant
+from app.domain.policy import Unbound
 from app.domain.reason import Cause
 from app.domain.remark import Note
 from app.domain.shipment import Shipment
@@ -184,10 +184,11 @@ class Parsed:
 class Checked:
     """Pipeline that reads the declaration with the real parser and checks it by the rule cards.
 
-    No policy profile is loaded yet, so every card sees a vacant policy under the number of
-    the header and every semantic question goes to the eval stub, which counts each batch as
-    one model call. A failure in parsing or in the checks of one declaration becomes a fault of
-    its outcome, so that the run goes on. The pipeline never sees the gold.
+    No policy profile is loaded yet, so every card sees a policy bound to nothing for the
+    reason policy_unknown under the number of the header, and every semantic question goes to
+    the eval stub, which counts each batch as one model call. A failure in parsing or in the
+    checks of one declaration becomes a fault of its outcome, so that the run goes on. The
+    pipeline never sees the gold.
     """
 
     __slots__ = ("_folder", "_library")
@@ -214,7 +215,7 @@ class Checked:
         try:
             verdicts = (
                 Carded(Cards(self._folder, judge))
-                .findings(declaration, Vacant(declaration.policy()))
+                .findings(declaration, Unbound("policy_unknown", declaration.policy()))
                 .verdicts()
             )
         except Exception as error:

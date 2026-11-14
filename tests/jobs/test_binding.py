@@ -29,7 +29,8 @@ params:
   parts: [number, date]
   ignore: {ignore}
 if_empty: mismatch
-comments: {{match: "a", mismatch: "b", review: "c"}}
+comments: {{match: "a", mismatch: "b", review: "c", policy_missing: "d",
+  policy_unreadable: "e", policy_unknown: "f", policy_ambiguous: "g"}}
 status: draft
 """
 
