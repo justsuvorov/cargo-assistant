@@ -9,6 +9,7 @@ from app.domain.policy import Policy as Reference
 from app.jobs.database import Sessions
 from app.jobs.errors import MissingProfileError, NotReadyError
 from app.jobs.models import Policy, PolicyProfile
+from app.jobs.schemas import Upgraded
 from app.policy.approved import Approved
 from app.policy.schema.profile import Profile
 
@@ -137,7 +138,7 @@ class Folios:
                 raise NotReadyError(
                     "Профиль изменён после открытия страницы, обновите её и проверьте снова"
                 )
-            gaps = Gaps(Profile.model_validate(current.body)).names()
+            gaps = Gaps(Upgraded(current.body).profile()).names()
             if gaps:
                 raise NotReadyError(f"Подтвердить нельзя, не заполнено: {', '.join(gaps)}")
             for row in rows[1:]:
@@ -173,7 +174,7 @@ class Folios:
         return Version(
             row.version,
             row.status,
-            Profile.model_validate(row.body),
+            Upgraded(row.body).profile(),
             row.approved_by,
             row.approved_at,
         )

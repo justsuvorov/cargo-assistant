@@ -10,7 +10,7 @@ from sqlalchemy import select
 from starlette.datastructures import FormData
 
 from app.auth.identity import Identity
-from app.jobs.errors import MissingProfileError, NotReadyError
+from app.jobs.errors import MissingProfileError, NotReadyError, SchemaVersionError
 from app.jobs.folios import Gaps
 from app.jobs.models import Job, Policy
 from app.jobs.queue import Snapshot
@@ -69,6 +69,8 @@ async def context(
         version = await services(request).folio.latest(policy_id)
     except MissingProfileError:
         return shown
+    except SchemaVersionError as error:
+        return {**shown, "notice": f"Профиль нельзя прочитать: {error}"}
     return {**shown, "version": version, "gaps": Gaps(version.profile).names()}
 
 
@@ -132,7 +134,10 @@ async def edit(
 ) -> RedirectResponse | HTMLResponse:
     await policy_of(request, who, policy_id)
     form = await request.form()
-    current = (await services(request).folio.latest(policy_id)).profile
+    try:
+        current = (await services(request).folio.latest(policy_id)).profile
+    except SchemaVersionError as error:
+        return await body(request, who, policy_id, str(error), status=409)
     try:
         saved = merged(form, current)
     except ValidationError as error:
@@ -155,6 +160,6 @@ async def approve(
     await policy_of(request, who, policy_id)
     try:
         await services(request).folio.approve(policy_id, version, who.name())
-    except NotReadyError as error:
+    except (NotReadyError, SchemaVersionError) as error:
         return await body(request, who, policy_id, str(error), status=409)
     return RedirectResponse(f"/policies/{policy_id}", status_code=303)

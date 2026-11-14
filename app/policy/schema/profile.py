@@ -39,6 +39,7 @@ class Profile(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    schema_version: int = 1
     number: str
     issued: date
     insurer: str

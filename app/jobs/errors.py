@@ -42,3 +42,10 @@ class ChoiceError(Exception):
     the folder, or the session was started before."""
 
     __slots__ = ()
+
+
+@final
+class SchemaVersionError(Exception):
+    """Saved profile whose schema version is unknown to this build, newer or broken."""
+
+    __slots__ = ()

@@ -25,7 +25,7 @@ from app.ingest.source import Source
 from app.jobs.building import Bench, Cell
 from app.jobs.conditioning import Found
 from app.jobs.database import Sessions
-from app.jobs.errors import MissingProfileError
+from app.jobs.errors import MissingProfileError, SchemaVersionError
 from app.jobs.folios import Folio, Taken
 from app.jobs.models import CheckResult, Declaration
 from app.jobs.ownership import Holding
@@ -94,7 +94,7 @@ class Bound:
             raise LookupError(f"Декларация {declaration_id} не прошла привязку к полису")
         try:
             return await self._folio.taken(row.policy_id)
-        except MissingProfileError:
+        except (MissingProfileError, SchemaVersionError):
             return Taken(Unbound("policy_profile", number), 0, "missing", ())
 
 
