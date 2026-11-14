@@ -63,9 +63,7 @@ async def administer(url: str, statements: tuple[str, ...], *, auto: bool) -> li
 
 
 @pytest.mark.postgres
-@pytest.mark.skipif(
-    not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset"
-)
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset")
 def test_upgrades_a_database_with_policies_on_postgres() -> None:
     base = os.environ["TEST_DATABASE_URL"]
     name = f"t36_{uuid.uuid4().hex}"
@@ -89,9 +87,7 @@ def test_upgrades_a_database_with_policies_on_postgres() -> None:
         command.upgrade(config(url), "head")
         found = asyncio.run(
             asyncio.wait_for(
-                administer(
-                    url, ("SELECT package_sha FROM policies ORDER BY id",), auto=False
-                ),
+                administer(url, ("SELECT package_sha FROM policies ORDER BY id",), auto=False),
                 30,
             )
         )

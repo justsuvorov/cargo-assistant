@@ -1,30 +1,18 @@
-from dataclasses import dataclass
 from typing import Final, Protocol, final
 
-from sqlalchemy import select
+from sqlalchemy import delete
 
 from app.jobs.database import Sessions
 from app.jobs.models import Policy, PolicyDocument
 from app.jobs.queue import Jobs
 from app.policy.package import Package
-from app.storage.archive import Stored
-from app.storage.disk import Storage
-from app.storage.layout import Layout
-
-
-@final
-@dataclass(frozen=True)
-class Registered:
-    """Identifiers of the policy and of the job that builds its profile."""
-
-    policy_id: int
-    job_id: int
+from app.storage.relative import Relative
 
 
 class Packages(Protocol):
-    """Place where the files of a policy package turn into stored files and a build job."""
+    """Place where the package of a policy is found in the storage, built again and described."""
 
-    async def receive(self, files: tuple[Stored, ...], group: str) -> Registered: ...
+    async def prefix(self, policy_id: int) -> str: ...
 
     async def rebuild(self, policy_id: int) -> int: ...
 
@@ -33,38 +21,21 @@ class Packages(Protocol):
 
 @final
 class Shelving:
-    """Packages that save every file under its relative path and queue the build in one
-    transaction, so the folders of the package stay as the customer made them."""
+    """Packages kept in the database: the folder of a policy is the folder of the session that
+    brought its files, and the documents of the package are told apart after it is read."""
 
-    __slots__ = ("_jobs", "_layout", "_sessions", "_storage")
+    __slots__ = ("_jobs", "_sessions")
 
-    def __init__(self, sessions: Sessions, jobs: Jobs, storage: Storage, layout: Layout) -> None:
+    def __init__(self, sessions: Sessions, jobs: Jobs) -> None:
         self._sessions: Final = sessions
         self._jobs: Final = jobs
-        self._storage: Final = storage
-        self._layout: Final = layout
 
-    async def receive(self, files: tuple[Stored, ...], group: str) -> Registered:
-        keys: list[str] = []
+    async def prefix(self, policy_id: int) -> str:
         async with self._sessions.session() as session:
-            policy = Policy(access_group=group, number="", insured="")
-            session.add(policy)
-            await session.flush()
-            try:
-                for file in files:
-                    key = self._layout.document(policy.id, file.name())
-                    self._storage.save(key, file.data())
-                    keys.append(key)
-                    session.add(PolicyDocument(policy_id=policy.id, kind="file", file_key=key))
-                policy.job_id = await self._jobs.add(
-                    session, "profile_build", {"policy_id": policy.id}
-                )
-                await session.commit()
-            except Exception:
-                for key in keys:
-                    self._storage.remove(key)
-                raise
-            return Registered(policy.id, policy.job_id)
+            policy = await session.get(Policy, policy_id)
+        if policy is None or not policy.package_key:
+            raise LookupError(f"У полиса {policy_id} нет папки с файлами")
+        return policy.package_key
 
     async def rebuild(self, policy_id: int) -> int:
         async with self._sessions.session() as session:
@@ -77,20 +48,28 @@ class Shelving:
 
     async def classify(self, policy_id: int, package: Package) -> None:
         async with self._sessions.session() as session:
-            rows = (
-                await session.scalars(
-                    select(PolicyDocument).where(PolicyDocument.policy_id == policy_id)
+            policy = await session.get(Policy, policy_id)
+            if policy is None:
+                raise LookupError(f"Полис {policy_id} не найден")
+            await session.execute(
+                delete(PolicyDocument).where(PolicyDocument.policy_id == policy_id)
+            )
+            session.add(
+                PolicyDocument(
+                    policy_id=policy_id,
+                    kind="policy",
+                    file_key=f"{policy.package_key}/{Relative(package.policy().reference()).path()}",
                 )
-            ).all()
-            by_key = {row.file_key: row for row in rows}
-            policy = by_key.get(self._layout.document(policy_id, package.policy().reference()))
-            if policy is not None:
-                policy.kind = "policy"
-            for amendment in package.amendments():
-                row = by_key.get(self._layout.document(policy_id, amendment.reference()))
-                if row is not None:
-                    row.kind = "amendment"
-                    row.addendum_number = str(amendment.number())
-                    row.effective_from = amendment.effective()
-                    row.applies_to = list(amendment.scope())
+            )
+            session.add_all(
+                PolicyDocument(
+                    policy_id=policy_id,
+                    kind="amendment",
+                    file_key=f"{policy.package_key}/{Relative(amendment.reference()).path()}",
+                    addendum_number=str(amendment.number()),
+                    effective_from=amendment.effective(),
+                    applies_to=list(amendment.scope()),
+                )
+                for amendment in package.amendments()
+            )
             await session.commit()

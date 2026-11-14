@@ -76,9 +76,9 @@ async def prepare(path: Path, clock: Moving) -> tuple[Database, Journaled, Queue
     async with database.session() as session:
         connection = await session.connection()
         await connection.run_sync(Base.metadata.create_all)
-        session.add(Policy(id=3, access_group="g"))
+        session.add(Policy(id=3, owner="u", package_sha="s"))
         session.add(
-            Declaration(id=5, policy_id=3, access_group="g", file_name="n", created_at=clock.moment)
+            Declaration(id=5, policy_id=3, owner="u", file_name="n", created_at=clock.moment)
         )
         for version, status in ((1, "replaced"), (2, "approved"), (3, "draft")):
             session.add(PolicyProfile(policy_id=3, version=version, status=status))

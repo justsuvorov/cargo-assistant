@@ -24,7 +24,8 @@ from app.domain.verdict import Ruling, Verdict
 from app.ingest.source import Source
 from app.jobs.building import Bench, Cell
 from app.jobs.database import Sessions
-from app.jobs.folios import Folio
+from app.jobs.errors import MissingProfileError
+from app.jobs.folios import Folio, Taken
 from app.jobs.models import CheckResult, Declaration
 from app.jobs.ownership import Holding
 from app.jobs.queue import Snapshot
@@ -67,12 +68,10 @@ class Retained:
 
 
 class Standing(Protocol):
-    """Policy that a declaration is checked against: the approved profile of the bound policy
-    or, without a binding, a policy that refuses every clause with the reason of the binding."""
+    """Profile that a declaration is checked by: the one of the policy it is bound to, or, when
+    that policy has no profile, a policy that refuses every clause with the reason profile."""
 
-    async def policy(self, declaration_id: int, number: str) -> Policy: ...
-
-    async def profile(self, declaration_id: int) -> int: ...
+    async def taken(self, declaration_id: int, number: str) -> Taken: ...
 
 
 @final
@@ -85,23 +84,17 @@ class Bound:
         self._folio: Final = folio
         self._sessions: Final = sessions
 
-    async def policy(self, declaration_id: int, number: str) -> Policy:
+    async def taken(self, declaration_id: int, number: str) -> Taken:
         async with self._sessions.session() as session:
             row = await session.get(Declaration, declaration_id)
         if row is None:
             raise LookupError(f"Декларация {declaration_id} не найдена")
-        if row.policy_id is not None:
-            return await self._folio.approved(row.policy_id)
-        if not row.binding:
+        if row.policy_id is None:
             raise LookupError(f"Декларация {declaration_id} не прошла привязку к полису")
-        return Unbound(row.binding, number)
-
-    async def profile(self, declaration_id: int) -> int:
-        async with self._sessions.session() as session:
-            row = await session.get(Declaration, declaration_id)
-        if row is None or row.policy_id is None:
-            return 0
-        return await self._folio.version(row.policy_id)
+        try:
+            return await self._folio.taken(row.policy_id)
+        except MissingProfileError:
+            return Taken(Unbound("policy_profile", number), 0, "missing", ())
 
 
 @final
@@ -274,7 +267,7 @@ class Results(Protocol):
 
     async def replace(self, job: Snapshot, findings: Findings) -> None: ...
 
-    async def stamp(self, job: Snapshot, versions: Versions, profile: int) -> None: ...
+    async def stamp(self, job: Snapshot, versions: Versions, taken: Taken) -> None: ...
 
     async def prompts(self, job: Snapshot, version: str) -> None: ...
 
@@ -317,7 +310,7 @@ class Tabled:
             declaration.places_answered = len(findings.verdicts())
             await session.commit()
 
-    async def stamp(self, job: Snapshot, versions: Versions, profile: int) -> None:
+    async def stamp(self, job: Snapshot, versions: Versions, taken: Taken) -> None:
         async with self._sessions.session() as session:
             await Holding(session).owned(job)
             declaration = await session.get(Declaration, job.declaration())
@@ -325,7 +318,8 @@ class Tabled:
                 raise LookupError(f"Декларация {job.declaration()} не найдена")
             declaration.code_version = versions.code()[:64]
             declaration.cards_version = versions.cards()[:64]
-            declaration.profile_version = profile
+            declaration.profile_version = taken.version
+            declaration.profile_status = taken.status
             declaration.model = versions.model()[:128]
             await session.commit()
 
@@ -343,12 +337,14 @@ class Tabled:
 @dataclass(frozen=True)
 class Docket:
     """Cells where the stages of a check leave the declaration, its policy, the judge that
-    recorded the questions and the verdicts for the next stage."""
+    recorded the questions, the verdicts and the profile the check was made by for the next
+    stage."""
 
     declaration: Cell[Filed]
     policy: Cell[Policy]
     recording: Cell[Recording]
     verdicts: Cell[tuple[Verdict, ...]]
+    taken: Cell[Taken]
 
 
 @final
@@ -399,7 +395,8 @@ class Checking:
         started = time.perf_counter()
         declaration = await asyncio.to_thread(self._read, await self._key(job.declaration()))
         parsed = time.perf_counter() - started
-        policy = await standing.policy(job.declaration(), declaration.policy())
+        taken = await standing.taken(job.declaration(), declaration.policy())
+        policy = taken.policy
         recording = Deferring()
         started = time.perf_counter()
         findings = await asyncio.to_thread(
@@ -407,7 +404,8 @@ class Checking:
         )
         checked = time.perf_counter() - started
         await results.replace(job, findings)
-        await results.stamp(job, versions, await standing.profile(job.declaration()))
+        await results.stamp(job, versions, taken)
+        self._docket.taken.put(taken)
         self._docket.declaration.put(declaration)
         self._docket.policy.put(policy)
         self._docket.recording.put(recording)

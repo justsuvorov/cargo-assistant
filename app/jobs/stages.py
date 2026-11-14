@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Final, Protocol, final
 
 from pydantic import BaseModel
-from sqlalchemy import select
-
 from app.core.journal import Journal
 from app.domain.semantics import Question, Semantics
 from app.domain.verdict import Verdict
-from app.jobs.binding import Binding, Ingesting, Matching, Numbering
+from app.jobs.binding import Binding, Ingesting
 from app.jobs.building import (
     Bench,
     Converting,
@@ -34,7 +32,8 @@ from app.jobs.checking import (
 )
 from app.jobs.database import Sessions
 from app.jobs.folios import Folio
-from app.jobs.models import Declaration
+from app.jobs.errors import MissingProfileError, WaitingError
+from app.jobs.models import Declaration, Job, Policy
 from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot
 from app.jobs.reporting import Reporting
@@ -90,11 +89,10 @@ class Pending:
 
 @final
 class Profiled:
-    """Stage that lets a declaration go on only when the profile of its policy is approved.
-
-    A declaration that is not yet bound to a policy has nothing to wait for; binding by the
-    number of the policy is the work of a later task.
-    """
+    """Stage that lets a declaration go on as soon as its policy has a profile of any kind, the
+    approved one or a draft: it does not wait for a person. While the profile is still being
+    built the declaration waits for the build; when the build failed it goes on without a
+    profile and every clause of the policy is refused with the reason profile."""
 
     __slots__ = ("_folio", "_sessions")
 
@@ -107,11 +105,24 @@ class Profiled:
 
     async def run(self, job: Snapshot) -> None:
         async with self._sessions.session() as session:
-            policy_id = await session.scalar(
-                select(Declaration.policy_id).where(Declaration.id == job.declaration())
+            declaration = await session.get(Declaration, job.declaration())
+            policy = (
+                await session.get(Policy, declaration.policy_id)
+                if declaration is not None and declaration.policy_id is not None
+                else None
             )
-        if policy_id is not None:
-            await self._folio.approved(policy_id)
+            build = (
+                await session.get(Job, policy.job_id)
+                if policy is not None and policy.job_id is not None
+                else None
+            )
+        if policy is None:
+            return
+        try:
+            await self._folio.taken(policy.id)
+        except MissingProfileError:
+            if build is not None and build.status not in {"done", "failed"}:
+                raise WaitingError("Ожидает сборки профиля полиса") from None
 
 
 @final
@@ -213,18 +224,12 @@ class Standard:
     def stages(self, kind: str) -> tuple[Stage, ...]:
         if kind != "reconcile":
             raise UnknownKindError(f"Для задач типа {kind} нет конвейера")
-        policy: Shelf[str] = Shelf()
-        docket = Docket(Shelf(), Shelf(), Shelf(), Shelf())
+        docket = Docket(Shelf(), Shelf(), Shelf(), Shelf(), Shelf())
         cardfile = Folder(self._kit.cards)
         return (
-            Ingesting(self._bench, self._sessions, policy, self._journal),
+            Ingesting(self._bench, self._sessions, self._journal),
             *(Pending(name, self._journal) for name in ("fields", "normalize")),
-            Binding(
-                Matching(self._sessions, Numbering(self._kit.cards)),
-                self._sessions,
-                policy,
-                self._journal,
-            ),
+            Binding(self._sessions, self._journal),
             Profiled(self._folio, self._sessions),
             Checking(
                 self._bench,
@@ -276,7 +281,7 @@ class Building:
         package: Shelf[Package] = Shelf()
         profile: Shelf[Profile] = Shelf()
         return (
-            Fetching(self._bench, Keys(), folder),
+            Fetching(self._bench, self._packages, folder),
             Converting(self._bench, folder, self._journal),
             Reading(folder, package, self._journal),
             Extracting(self._models, package, profile),

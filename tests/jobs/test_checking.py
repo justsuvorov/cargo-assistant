@@ -27,7 +27,7 @@ from app.jobs.database import Database
 from app.jobs.errors import LostError
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
-from app.jobs.models import Base, CheckResult, Correction, Declaration, Job, Policy
+from app.jobs.models import Base, CheckResult, Correction, Declaration, Job, Policy, Workspace
 from app.jobs.queue import Queue, Snapshot
 from app.jobs.retention import Monthly
 from app.jobs.stages import Kit, Standard
@@ -140,9 +140,9 @@ class Stand:
     """Everything one test needs: database, storage, queue and a pipeline with a given judge."""
 
     def __init__(
-        self, folder: Path, judge: Counting, make: str, policy: str, *, bound: bool = True
+        self, folder: Path, judge: Counting, make: str, policy: str, *, profile: str = "approved"
     ) -> None:
-        self.bound = bound
+        self.profile = profile
         self.database = Database(f"sqlite+aiosqlite:///{folder / 's.db'}")
         self.storage = DiskStorage(folder / "files")
         self.queue = Queue(self.database, Utc())
@@ -158,27 +158,40 @@ class Stand:
     async def prepare(self) -> None:
         source = self.folder / "a.xlsx"
         {"ru": russian, "en": english}[self.make](source, self.policy)
-        self.storage.save("declarations/1/source/a.xlsx", source.read_bytes())
+        self.storage.save("u/1/folder/a.xlsx", source.read_bytes())
         async with self.database.session() as session:
             connection = await session.connection()
             await connection.run_sync(Base.metadata.create_all)
-            session.add(Policy(number=self.policy if self.bound else "OTHER1", access_group="g"))
+            session.add(Policy(number=self.policy, owner="u", package_sha="s"))
+            await session.flush()
+            session.add(
+                Workspace(owner="u", policy_id=1, found=["a.xlsx"], created_at=datetime(2026, 1, 1))
+            )
             await session.flush()
             session.add(
                 Declaration(
-                    access_group="g",
+                    owner="u",
+                    workspace_id=1,
                     file_name="a.xlsx",
-                    file_key="declarations/1/source/a.xlsx",
+                    file_key="u/1/folder/a.xlsx",
                     created_at=datetime(2026, 1, 1),
                 )
             )
+            await session.flush()
             job = await self.queue.add(session, "reconcile", {"declaration_id": 1})
+            built = await self.queue.add(session, "profile_build", {"policy_id": 1})
+            policy = await session.get(Policy, 1)
             declaration = await session.get(Declaration, 1)
-            if declaration is not None:
+            built_job = await session.get(Job, built)
+            if declaration is not None and policy is not None and built_job is not None:
                 declaration.job_id = job
+                policy.job_id = built
+                built_job.status = "done" if self.profile != "missing" else "failed"
             await session.commit()
-        await self.folio.draft(1, profile(self.policy if self.bound else "OTHER1"))
-        await self.folio.approve(1, 1, "expert")
+        if self.profile != "missing":
+            await self.folio.draft(1, profile(self.policy))
+        if self.profile == "approved":
+            await self.folio.approve(1, 1, "expert")
 
     async def drain(self) -> int:
         kit = Kit(
@@ -237,7 +250,7 @@ def summary(folder: Path, make: str) -> tuple[object, ...]:
 _EXPECTED = (
     "done",
     True,
-    ["Результат проверки", "Особые условия"],
+    ["Результат проверки", "Особые условия", "Профиль полиса"],
     [1, 1, 1],
     (("v1", "c1", 1, "prompts-7"), True),
 )
@@ -417,16 +430,24 @@ def test_does_not_hold_other_work_while_the_model_answers_slowly(tmp_path: Path)
 async def stage_and_eval(
     folder: Path,
 ) -> tuple[list[tuple[str, str, str, str]], list[tuple[str, str, str, str]]]:
-    stand = Stand(folder, Counting(), "ru", word(), bound=False)
+    stand = Stand(folder, Counting(), "ru", word(), profile="missing")
     try:
         await stand.prepare()
         await stand.drain()
         async with stand.database.session() as session:
             rows = (await session.scalars(select(CheckResult))).all()
-        staged = sorted((row.line, row.field, row.status, row.reason) for row in rows)
+        staged = sorted(
+            (
+                row.line,
+                row.field,
+                row.status,
+                row.reason.replace("policy.profile", "policy.unknown"),
+            )
+            for row in rows
+        )
     finally:
         await stand.close()
-    outcome = Checked(Shelf(folder / "files" / "declarations" / "1" / "source").catalog(), _CARDS)
+    outcome = Checked(Shelf(folder / "files" / "u" / "1" / "folder").catalog(), _CARDS)
     evaluated = sorted(
         (
             verdict.place().shipment(),
@@ -465,7 +486,7 @@ def test_falls_back_to_the_postponed_judge_when_the_gateway_is_not_configured() 
 
 
 async def unbound_reasons(folder: Path) -> tuple[str, ...]:
-    stand = Stand(folder, Counting(), "ru", word(), bound=False)
+    stand = Stand(folder, Counting(), "ru", word(), profile="missing")
     try:
         await stand.prepare()
         await stand.drain()
@@ -476,11 +497,104 @@ async def unbound_reasons(folder: Path) -> tuple[str, ...]:
         await stand.close()
 
 
-def test_asks_a_person_with_the_reason_of_the_binding_for_an_unbound_declaration(
+def test_asks_a_person_with_the_reason_profile_for_a_policy_without_a_profile(
     tmp_path: Path,
 ) -> None:
     assert_that(
         asyncio.run(asyncio.wait_for(unbound_reasons(tmp_path), 120)),
-        equal_to(("policy.unknown",)),
-        "Unbound declaration does not get the code of its binding in cards with a policy clause",
+        equal_to(("policy.profile",)),
+        "Declaration of a policy without a profile does not get the reason profile in cards with a policy clause",
+    )
+
+
+async def footnote_of(folder: Path, profile: str) -> tuple[str, int, str, str]:
+    stand = Stand(folder, Counting(), "ru", word(), profile=profile)
+    try:
+        await stand.prepare()
+        await stand.drain()
+        async with stand.database.session() as session:
+            declaration = await session.get(Declaration, 1)
+        assert declaration is not None
+        book = load_workbook(folder / "files" / declaration.result_key)
+        return (
+            declaration.profile_status,
+            declaration.profile_version,
+            str(book["Профиль полиса"]["A1"].value),
+            declaration.binding,
+        )
+    finally:
+        await stand.close()
+
+
+def test_says_in_the_workbook_that_the_profile_is_not_confirmed_when_it_is_a_draft(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(footnote_of(tmp_path, "draft"), 120)),
+        equal_to(
+            (
+                "draft",
+                1,
+                "Профиль полиса не подтверждён, проверка выполнена по черновику версии 1",
+                "bound",
+            )
+        ),
+        "Result of a check by a draft does not say that the profile is not confirmed",
+    )
+
+
+def test_says_in_the_workbook_that_the_profile_is_confirmed_when_it_is_approved(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(footnote_of(tmp_path, "approved"), 120)),
+        equal_to(("approved", 1, "Профиль полиса подтверждён, версия 1", "bound")),
+        "Result of a check by an approved profile does not say that it is confirmed",
+    )
+
+
+def test_says_in_the_workbook_that_the_profile_is_missing_when_the_build_failed(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(footnote_of(tmp_path, "missing"), 120)),
+        equal_to(("missing", 0, "Профиль полиса не собран, пункты полиса не проверены", "bound")),
+        "Result of a check without a profile does not say that the profile is missing",
+    )
+
+
+async def waits_for_the_build(folder: Path) -> tuple[str, str]:
+    stand = Stand(folder, Counting(), "ru", word(), profile="missing")
+    try:
+        await stand.prepare()
+        async with stand.database.session() as session:
+            built = await session.get(Job, 2)
+            assert built is not None
+            built.status = "running"
+            await session.commit()
+        await stand.drain()
+        async with stand.database.session() as session:
+            parked = await session.get(Job, 1)
+            assert parked is not None
+            before = parked.status
+            built = await session.get(Job, 2)
+            assert built is not None
+            built.status = "failed"
+            await session.commit()
+        await stand.drain()
+        async with stand.database.session() as session:
+            finished = await session.get(Job, 1)
+        assert finished is not None
+        return before, finished.status
+    finally:
+        await stand.close()
+
+
+def test_parks_the_declaration_while_the_profile_is_built_and_runs_it_after_the_build(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(waits_for_the_build(tmp_path), 120)),
+        equal_to(("waiting", "done")),
+        "Declaration does not wait for the build of the profile and then run",
     )
