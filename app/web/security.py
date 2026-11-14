@@ -39,10 +39,10 @@ def unsigned(request: Request) -> HTTPException:
 def identity(request: Request) -> Identity:
     known = services(request)
     try:
-        if bearer(request):
+        if bearer(request) or (known.settings.development() and not request.cookies.get(COOKIE)):
             who = known.passport.identity(bearer(request))
-        elif request.cookies.get(COOKIE) or known.settings.development():
-            who = known.session.identity(request.cookies.get(COOKIE, ""))
+        elif request.cookies.get(COOKIE):
+            who = known.session.identity(request.cookies[COOKIE])
         else:
             raise unsigned(request)
     except DeniedError as error:

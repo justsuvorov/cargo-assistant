@@ -14,6 +14,9 @@ data:
   KEYCLOAK_ROLE_USER: cargo_user
   KEYCLOAK_ROLE_EXPERT: cargo_expert
   KEYCLOAK_ROLE_ADMIN: cargo_admin
+  SESSION_SECURE: "true"
+  SESSION_HOURS: "12"
+  APP_BASE_URL: ""
   LLM_PROVIDER: vsk
   LLM_ALLOW_EXTERNAL: "false"
   LLM_API_URL: https://gateway.example.invalid/v1/chat/completions

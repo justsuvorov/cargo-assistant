@@ -5,7 +5,6 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import jwt
@@ -14,11 +13,56 @@ from alembic.config import Config
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi.testclient import TestClient
 from hamcrest import assert_that, contains_string, equal_to
+from httpx import Response
 from jwt.algorithms import RSAAlgorithm
 
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.web.application import create_app
+
+
+class Handler(BaseHTTPRequestHandler):
+    """Request handler of the fake provider."""
+
+    def log_request(self, code: int | str = "-", size: int | str = "-") -> None:
+        del code, size
+
+    def provider(self) -> "Provider":
+        server = self.server
+        assert isinstance(server, Server)
+        return server.provider
+
+    def reply(self, status: int, body: dict[str, object]) -> None:
+        data = json.dumps(body).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def do_GET(self) -> None:
+        provider = self.provider()
+        jwk = json.loads(RSAAlgorithm.to_jwk(provider.key.public_key()))
+        self.reply(200, {"keys": [{**jwk, "kid": "k1", "alg": "RS256", "use": "sig"}]})
+
+    def do_POST(self) -> None:
+        provider = self.provider()
+        form = parse_qs(self.rfile.read(int(self.headers["Content-Length"])).decode())
+        provider.forms.append(form)
+        challenge = provider.challenges.get(form["code"][0], "")
+        digest = hashlib.sha256(form["code_verifier"][0].encode()).digest()
+        if base64.urlsafe_b64encode(digest).decode().rstrip("=") != challenge:
+            self.reply(400, {"error": "invalid_grant"})
+            return
+        self.reply(200, {"access_token": provider.token()})
+
+
+class Server(ThreadingHTTPServer):
+    """Server of the fake provider that knows the provider it serves."""
+
+    def __init__(self, provider: "Provider") -> None:
+        super().__init__(("127.0.0.1", 0), Handler)
+        self.provider = provider
 
 
 class Provider:
@@ -29,35 +73,7 @@ class Provider:
         self.challenges: dict[str, str] = {}
         self.claims = claims
         self.forms: list[dict[str, list[str]]] = []
-        provider = self
-
-        class Handler(BaseHTTPRequestHandler):
-            def log_message(self, format: str, *args: object) -> None:
-                del format, args
-
-            def reply(self, status: int, body: dict[str, Any]) -> None:
-                data = json.dumps(body).encode()
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
-
-            def do_GET(self) -> None:
-                jwk = json.loads(RSAAlgorithm.to_jwk(provider.key.public_key()))
-                self.reply(200, {"keys": [{**jwk, "kid": "k1", "alg": "RS256", "use": "sig"}]})
-
-            def do_POST(self) -> None:
-                form = parse_qs(self.rfile.read(int(self.headers["Content-Length"])).decode())
-                provider.forms.append(form)
-                challenge = provider.challenges.get(form["code"][0], "")
-                digest = hashlib.sha256(form["code_verifier"][0].encode()).digest()
-                if base64.urlsafe_b64encode(digest).decode().rstrip("=") != challenge:
-                    self.reply(400, {"error": "invalid_grant"})
-                    return
-                self.reply(200, {"access_token": provider.token()})
-
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = Server(self)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
 
     def address(self) -> str:
@@ -96,11 +112,12 @@ def settings(folder: Path, provider: Provider, extra: str = "") -> EnvSettings:
     return EnvSettings(Environment(str(folder / ".env")))
 
 
-def signed_in(client: TestClient, provider: Provider, target: str = "/reconcile") -> Any:
-    start = client.get(f"/auth/login?next={target}")
+def signed_in(client: TestClient, provider: Provider, target: str = "/reconcile") -> Response:
+    start: Response = client.get(f"/auth/login?next={target}")
     query = parse_qs(urlparse(start.headers["location"]).query)
     provider.challenges["the-code"] = query["code_challenge"][0]
-    return client.get(f"/auth/callback?code=the-code&state={query['state'][0]}")
+    arrived: Response = client.get(f"/auth/callback?code=the-code&state={query['state'][0]}")
+    return arrived
 
 
 def claims() -> dict[str, object]:
@@ -192,7 +209,7 @@ def test_refuses_callback_with_foreign_state(tmp_path: Path) -> None:
     assert_that(
         (response.status_code, provider.forms),
         equal_to((401, [])),
-        "Callback with a foreign state is accepted",
+        "Callback with a foreign state is not refused",
     )
 
 
@@ -203,7 +220,9 @@ def test_refuses_callback_without_login_cookie(tmp_path: Path) -> None:
             response = client.get("/auth/callback?code=the-code&state=x")
     finally:
         provider.close()
-    assert_that(response.status_code, equal_to(401), "Callback without a login cookie is accepted")
+    assert_that(
+        response.status_code, equal_to(401), "Callback without a login cookie is not refused"
+    )
 
 
 def test_refuses_login_when_token_has_no_sub(tmp_path: Path) -> None:
@@ -213,7 +232,9 @@ def test_refuses_login_when_token_has_no_sub(tmp_path: Path) -> None:
             response = signed_in(client, provider)
     finally:
         provider.close()
-    assert_that(response.status_code, equal_to(401), "Login with a token without sub is accepted")
+    assert_that(
+        response.status_code, equal_to(401), "Login with a token without sub is not refused"
+    )
 
 
 def test_refuses_login_of_person_without_role(tmp_path: Path) -> None:
@@ -223,7 +244,9 @@ def test_refuses_login_of_person_without_role(tmp_path: Path) -> None:
             response = signed_in(client, provider)
     finally:
         provider.close()
-    assert_that(response.status_code, equal_to(403), "Login of a person without a role is accepted")
+    assert_that(
+        response.status_code, equal_to(403), "Login of a person without a role is not refused"
+    )
 
 
 def test_sends_visitor_to_login_again_when_session_is_forged(tmp_path: Path) -> None:
@@ -293,7 +316,7 @@ def test_needs_no_login_when_login_is_disabled(tmp_path: Path) -> None:
             codes = (client.get("/reconcile").status_code, client.get("/auth/login").status_code)
     finally:
         provider.close()
-    assert_that(codes, equal_to((200, 302)), "Disabled login still asks for a login")
+    assert_that(codes, equal_to((200, 302)), "Disabled login does not skip the login page")
 
 
 def test_refuses_to_start_without_session_secret(tmp_path: Path) -> None:
@@ -307,4 +330,6 @@ def test_refuses_to_start_without_session_secret(tmp_path: Path) -> None:
             failed = True
     finally:
         provider.close()
-    assert_that(failed, equal_to(True), "Application starts without a session secret")
+    assert_that(
+        failed, equal_to(True), "Application does not refuse to start without a session secret"
+    )

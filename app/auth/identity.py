@@ -16,7 +16,7 @@ class Identity(Protocol):
 
     def group(self) -> str: ...
 
-    def card(self) -> dict[str, object]: ...
+    def card(self) -> dict[str, str]: ...
 
 
 @final
@@ -51,12 +51,12 @@ class Person:
             raise DeniedError(f"У пользователя {self._name} нет группы доступа")
         return owned[0]
 
-    def card(self) -> dict[str, object]:
+    def card(self) -> dict[str, str]:
         return {
             "sub": self._id,
             "name": self._name,
-            "roles": sorted(self._roles),
-            "groups": sorted(self._groups),
+            "roles": ",".join(sorted(self._roles)),
+            "groups": ",".join(sorted(self._groups)),
         }
 
 
@@ -90,5 +90,5 @@ class Local:
     def group(self) -> str:
         return self._person.group()
 
-    def card(self) -> dict[str, object]:
+    def card(self) -> dict[str, str]:
         return {**self._person.card(), "sub": self._id}

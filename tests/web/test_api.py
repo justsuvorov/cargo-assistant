@@ -145,6 +145,7 @@ def test_strips_directories_from_uploaded_file_name(tmp_path: Path) -> None:
 
 
 def test_refuses_upload_without_token_when_keycloak_is_on(tmp_path: Path) -> None:
-    with TestClient(create_app(settings(tmp_path, "KEYCLOAK_URL=http://kc.invalid"))) as client:
+    config = settings(tmp_path, "KEYCLOAK_URL=http://kc.invalid\nSESSION_SECRET=s3cret")
+    with TestClient(create_app(config)) as client:
         response = client.post("/api/declarations", files=[("files", ("a.xlsx", b"x"))])
     assert_that(response.status_code, equal_to(401), "Upload without a token is not refused")

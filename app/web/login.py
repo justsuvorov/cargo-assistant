@@ -1,10 +1,9 @@
 import secrets
 from base64 import urlsafe_b64encode
 from hashlib import sha256
-from typing import Any
 from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 
 from app.auth.errors import DeniedError
@@ -37,7 +36,7 @@ def keep(response: RedirectResponse, request: Request, name: str, value: str, se
 
 
 @router.get("/login")
-async def enter(request: Request, next: str = "/") -> RedirectResponse:
+async def enter(request: Request, target: str = Query("/", alias="next")) -> RedirectResponse:
     known = services(request)
     if known.settings.development():
         return RedirectResponse("/", status_code=302)
@@ -63,7 +62,7 @@ async def enter(request: Request, next: str = "/") -> RedirectResponse:
         request,
         RITUAL,
         known.seal.seal(
-            {"state": state, "verifier": verifier, "next": local(next)}, RITUAL_SECONDS
+            {"state": state, "verifier": verifier, "next": local(target)}, RITUAL_SECONDS
         ),
         RITUAL_SECONDS,
     )
@@ -78,18 +77,18 @@ async def arrive(
     if error:
         raise HTTPException(status_code=401, detail=f"Keycloak отказал во входе: {error}")
     try:
-        ritual: dict[str, Any] = known.seal.open(request.cookies.get(RITUAL, ""))
-        if not code or not secrets.compare_digest(state, str(ritual.get("state", "-"))):
+        ritual: dict[str, str] = known.seal.open(request.cookies.get(RITUAL, ""))
+        if not code or not secrets.compare_digest(state, ritual.get("state", "-")):
             raise DeniedError("Параметр state входа не совпадает с сохранённым")
         who = known.passport.identity(
-            await known.tokens.access(code, str(ritual["verifier"]), address(request))
+            await known.tokens.access(code, ritual["verifier"], address(request))
         )
     except DeniedError as failure:
         raise HTTPException(status_code=401, detail=f"Вход не выполнен: {failure}") from failure
     if not who.allows("user"):
         raise HTTPException(status_code=403, detail="Недостаточно прав для работы с сервисом")
     hours = known.settings.hours() * 3600
-    response = RedirectResponse(local(str(ritual.get("next", "/"))), status_code=302)
+    response = RedirectResponse(local(ritual.get("next", "/")), status_code=302)
     keep(response, request, COOKIE, known.seal.seal(who.card(), hours), hours)
     response.delete_cookie(RITUAL, path="/")
     return response

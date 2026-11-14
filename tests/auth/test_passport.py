@@ -161,7 +161,7 @@ def test_refuses_token_without_sub(tmp_path: Path) -> None:
             token(private, {"iss": f"http://kc.local/realms/{realm}", "sub": ""})
         ),
         raises(DeniedError, "sub"),
-        "Token without sub is accepted",
+        "Token without sub is not refused",
     )
 
 

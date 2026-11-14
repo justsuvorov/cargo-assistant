@@ -63,7 +63,7 @@ def test_refuses_empty_secret() -> None:
     assert_that(
         lambda: Signed("", Moment()),
         raises(ValueError, "SESSION_SECRET"),
-        "Empty secret is accepted",
+        "Empty secret is not refused",
     )
 
 
@@ -84,5 +84,5 @@ def test_refuses_session_without_sub() -> None:
     assert_that(
         lambda: Sealed(signer).identity(signer.seal({"name": "x"}, 60)),
         raises(DeniedError, "sub"),
-        "Session without sub is accepted",
+        "Session without sub is not refused",
     )
