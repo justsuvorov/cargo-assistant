@@ -10,7 +10,7 @@ from app.auth.exchange import Remote
 from app.auth.passport import Keycloak, Open, Passport, RemoteKeys
 from app.auth.seal import Sealed, Signed
 from app.core.clock import Utc
-from app.core.journal import Sink
+from app.core.journal import LogJournal, Sink
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings, Settings
 from app.jobs.building import Workbench
@@ -63,7 +63,7 @@ def create_app(settings: Settings) -> FastAPI:
             database,
             queue,
             (storage, Keys(), Workbench(storage, settings.soffice())),
-            Utc(),
+            (Utc(), LogJournal(logging.getLogger("web"))),
         ),
         Shelving(database, queue),
         Folios(database, Utc()),

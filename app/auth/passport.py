@@ -88,7 +88,6 @@ class Keycloak:
             sub,
             str(claims.get("preferred_username", sub)),
             self._roles(frozenset(map(str, claims.get("realm_access", {}).get("roles", [])))),
-            frozenset(str(group).strip("/") for group in claims.get("groups", [])),
         )
 
     def _roles(self, granted: frozenset[str]) -> frozenset[str]:

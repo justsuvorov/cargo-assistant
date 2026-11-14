@@ -81,7 +81,7 @@ def settings(folder: Path, extra: str = "AUTH_DEV_MODE=true") -> EnvSettings:
 def as_user(application: FastAPI, sub: str) -> None:
     application.state.services = replace(
         application.state.services,
-        passport=Sender(Person(sub, f"name-{sub}", frozenset({"user"}), frozenset())),
+        passport=Sender(Person(sub, f"name-{sub}", frozenset({"user"}))),
     )
 
 

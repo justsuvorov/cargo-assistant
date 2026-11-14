@@ -36,7 +36,13 @@ _BRANCHES = frozenset({*_GROUNDED, "filled", *_STATUSES})
 _FORMS = frozenset({"vertical", "psg"})
 _MIXED = ".mixed"
 _CASES = frozenset({"foreign", "fused", "latin", "unformed"})
-_BINDINGS = ("policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous")
+_BINDINGS = (
+    "policy_missing",
+    "policy_unreadable",
+    "policy_unknown",
+    "policy_ambiguous",
+    "policy_profile",
+)
 
 
 class Form(BaseModel):

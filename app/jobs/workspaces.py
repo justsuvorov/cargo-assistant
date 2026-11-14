@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
+from app.core.journal import Journal
 from app.jobs.building import Bench
 from app.jobs.database import Sessions
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
@@ -52,19 +53,19 @@ class Filing:
     queued again by the next session.
     """
 
-    __slots__ = ("_clock", "_jobs", "_parts", "_sessions")
+    __slots__ = ("_jobs", "_notes", "_parts", "_sessions")
 
     def __init__(
         self,
         sessions: Sessions,
         jobs: Jobs,
         parts: tuple[Storage, Layout, Bench],
-        clock: Clock,
+        notes: tuple[Clock, Journal],
     ) -> None:
         self._sessions: Final = sessions
         self._jobs: Final = jobs
         self._parts: Final = parts
-        self._clock: Final = clock
+        self._notes: Final = notes
 
     async def open(self, owner: str, who: str, name: str, files: tuple[Stored, ...]) -> int:
         storage, layout, _ = self._parts
@@ -76,7 +77,7 @@ class Filing:
                 name=name[:255],
                 found=[],
                 package_sha="",
-                created_at=self._clock.now(),
+                created_at=self._notes[0].now(),
             )
             session.add(row)
             await session.flush()
@@ -111,8 +112,9 @@ class Filing:
             row.policy_id = policy.id
             await self._built(session, policy, row)
             ids = [await self._declared(session, row, path) for path in chosen]
-            row.started_at = self._clock.now()
+            row.started_at = self._notes[0].now()
             await session.commit()
+            self._notes[1].info(f"Сессия {row.id}: запущено {len(ids)} деклараций", 0, 0)
             return tuple(ids)
 
     def _checked(self, row: Workspace, chosen: tuple[str, ...]) -> None:
@@ -167,7 +169,7 @@ class Filing:
             workspace_id=row.id,
             file_name=PurePosixPath(path).name,
             file_key=key,
-            created_at=self._clock.now(),
+            created_at=self._notes[0].now(),
         )
         session.add(declaration)
         await session.flush()
@@ -176,6 +178,9 @@ class Filing:
         )
         await self._signed(
             session, declaration.job_id, row, hashlib.sha256(storage.read(key)).hexdigest()
+        )
+        self._notes[1].info(
+            f"Сессия {row.id}: декларация поставлена в очередь", declaration.job_id, declaration.id
         )
         return declaration.id
 
