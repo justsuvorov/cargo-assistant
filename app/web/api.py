@@ -7,7 +7,7 @@ from app.auth.identity import Identity
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
 from app.jobs.models import Workspace
 from app.jobs.queue import MissingJobError
-from app.web.folders import opened
+from app.web.folders import TooLargeError, opened
 from app.web.overviews import Overview, overview
 from app.web.security import identity, services, visible, workspace_of
 
@@ -51,7 +51,10 @@ def described(view: Overview) -> dict[str, object]:
 async def open_folder(
     request: Request, files: list[UploadFile], who: Annotated[Identity, Depends(identity)]
 ) -> dict[str, object]:
-    name, found = await opened(files)
+    try:
+        name, found = await opened(files, services(request).settings.folder_limit())
+    except TooLargeError as error:
+        raise HTTPException(status_code=413, detail=str(error)) from error
     number = await services(request).workspaces.open(who.id(), who.name(), name, found)
     return described(await overview(request, who, await workspace_of(request, who, number)))
 

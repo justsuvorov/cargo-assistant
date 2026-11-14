@@ -1,16 +1,21 @@
 import asyncio
+import os
 import random
 import uuid
 from datetime import date, datetime
 from pathlib import Path
 
+import pytest
 from hamcrest import assert_that, contains_string, equal_to, raises
+from sqlalchemy import make_url
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.clock import Utc
 from app.jobs.database import Database
 from app.jobs.errors import MissingProfileError, NotReadyError
 from app.jobs.folios import Folios
-from app.jobs.models import Base, Policy
+from app.jobs.models import Base, Policy, PolicyProfile
 from app.policy.schema.profile import Profile
 
 
@@ -36,6 +41,13 @@ async def prepare(path: Path) -> tuple[Database, int]:
         session.add(Policy(owner="u", package_sha="s", number="", insured=""))
         await session.commit()
     return database, 1
+
+
+async def administer(url: str, statement: str) -> None:
+    engine = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    async with engine.connect() as connection:
+        await connection.exec_driver_sql(statement)
+    await engine.dispose()
 
 
 async def numbers_drafts_one_after_another(tmp_path: Path) -> int:
@@ -248,4 +260,65 @@ def test_refuses_unknown_policy(tmp_path: Path) -> None:
         lambda: asyncio.run(asyncio.wait_for(drafts_unknown_policy(tmp_path), 30)),
         raises(Exception, "Полис 99 не найден"),
         "Draft of an unknown policy is not refused",
+    )
+
+
+async def drafts_at_once(url: str, count: int) -> list[int]:
+    database = Database(url)
+    async with database.session() as session:
+        connection = await session.connection()
+        await connection.run_sync(Base.metadata.create_all)
+        session.add(Policy(owner="u", package_sha="s", number="", insured=""))
+        await session.commit()
+    folio = Folios(database, Utc())
+    found = await asyncio.gather(*[folio.draft(1, profile(f"N{each}")) for each in range(count)])
+    await database.close()
+    return sorted(found)
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset")
+def test_gives_drafts_saved_at_once_different_versions_without_losing_any_on_postgres() -> None:
+    base = os.environ["TEST_DATABASE_URL"]
+    name = f"t34_{uuid.uuid4().hex}"
+    asyncio.run(administer(base, f"CREATE DATABASE {name}"))
+    try:
+        url = make_url(base).set(database=name).render_as_string(False)
+        assert_that(
+            asyncio.run(asyncio.wait_for(drafts_at_once(url, 4), 60)),
+            equal_to([1, 2, 3, 4]),
+            "Drafts saved at once get equal versions or some of them are lost",
+        )
+    finally:
+        asyncio.run(administer(base, f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+
+
+def test_gives_drafts_saved_at_once_different_versions_on_sqlite(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(drafts_at_once(f"sqlite+aiosqlite:///{tmp_path / 'r.db'}", 4), 60)
+        ),
+        equal_to([1, 2, 3, 4]),
+        "Drafts saved at once on sqlite get equal versions or some of them are lost",
+    )
+
+
+async def refuses_equal_versions(tmp_path: Path) -> bool:
+    database, policy = await prepare(tmp_path)
+    async with database.session() as session:
+        session.add_all(
+            [PolicyProfile(policy_id=policy, version=1), PolicyProfile(policy_id=policy, version=1)]
+        )
+        try:
+            await session.commit()
+        except IntegrityError:
+            return True
+        return False
+
+
+def test_refuses_two_profiles_of_a_policy_with_one_version(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(refuses_equal_versions(tmp_path), 30)),
+        equal_to(True),
+        "Two profiles of one policy with the same version are accepted",
     )

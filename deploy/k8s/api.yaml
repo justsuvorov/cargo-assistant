@@ -64,6 +64,8 @@ kind: Ingress
 metadata:
   name: cargo-api
   namespace: cargo-assistant
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "300m"
 spec:
   ingressClassName: replace-with-class
   rules:

@@ -81,11 +81,11 @@ class Sender:
         return self._person
 
 
-def settings(folder: Path) -> EnvSettings:
+def settings(folder: Path, extra: str = "") -> EnvSettings:
     url = f"sqlite+aiosqlite:///{folder / 'web.db'}"
     (folder / ".env").write_text(
         f"DATABASE_URL={url}\nSTORAGE_DIR={folder / 'files'}\nAUTH_DEV_MODE=true\n"
-        "WORKER_POLL_INTERVAL=0.05\nWORKER_JOB_TIMEOUT=120\n",
+        f"WORKER_POLL_INTERVAL=0.05\nWORKER_JOB_TIMEOUT=120\n{extra}",
         encoding="utf-8",
     )
     config = Config()
@@ -449,3 +449,51 @@ def test_answers_not_found_for_the_archive_of_a_session_without_results(tmp_path
     assert_that(
         response.status_code, equal_to(404), "Archive without results is not reported as missing"
     )
+
+
+def test_refuses_a_folder_larger_than_the_limit_and_names_the_limit(tmp_path: Path) -> None:
+    with TestClient(create_app(settings(tmp_path, "FOLDER_MAX_MB=0.001\n"))) as client:
+        response = client.post("/sessions", files=[("files", ("a/b.xlsx", b"x" * 5000))])
+        listing = client.get("/sessions").text
+    assert_that(
+        (response.status_code, "1 КБ" in response.text, "/sessions/1" in listing),
+        equal_to((413, True, False)),
+        "Folder over the limit is not refused with a page that names the limit",
+    )
+
+
+def test_refuses_a_zip_that_unpacks_larger_than_the_limit(tmp_path: Path) -> None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as package:
+        package.writestr("Пример/a.xlsx", b"0" * 200000)
+    with TestClient(create_app(settings(tmp_path, "FOLDER_MAX_MB=0.05\n"))) as client:
+        response = client.post("/sessions", files=[("files", ("Пример.zip", buffer.getvalue()))])
+    assert_that(
+        response.status_code,
+        equal_to(413),
+        "Zip that unpacks over the limit is not refused",
+    )
+
+
+def test_refuses_a_conditions_file_larger_than_the_limit_and_saves_nothing(
+    tmp_path: Path,
+) -> None:
+    with TestClient(create_app(settings(tmp_path, "CONDITIONS_MAX_MB=0.001\n"))) as client:
+        response = client.post(
+            "/sessions",
+            files=[*folder(number()), ("conditions", ("условия.xlsx", b"x" * 5000))],
+        )
+        listing = client.get("/sessions").text
+    assert_that(
+        (response.status_code, "1 КБ" in response.text, "/sessions/1" in listing),
+        equal_to((413, True, False)),
+        "Conditions file over the limit is not refused with its limit and without saving",
+    )
+
+
+def test_accepts_a_folder_within_the_limit(tmp_path: Path) -> None:
+    with TestClient(
+        create_app(settings(tmp_path, "FOLDER_MAX_MB=5\n")), follow_redirects=False
+    ) as client:
+        response = client.post("/sessions", files=folder(number()))
+    assert_that(response.status_code, equal_to(303), "Folder within the limit is refused")

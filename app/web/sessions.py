@@ -12,7 +12,7 @@ from app.auth.identity import Identity
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
 from app.jobs.models import Declaration, Job, Workspace
 from app.storage.archive import Blob, Zipped
-from app.web.folders import chosen, opened
+from app.web.folders import TooLargeError, chosen, opened
 from app.web.overviews import overview
 from app.web.security import identity, services, workspace_of
 
@@ -80,20 +80,25 @@ async def listing(request: Request, who: Annotated[Identity, Depends(identity)])
 
 @router.get("/sessions/new", response_class=HTMLResponse)
 async def blank(request: Request, _who: Annotated[Identity, Depends(identity)]) -> HTMLResponse:
-    return templates.TemplateResponse(request, "session_new.html", {"page": "new"})
+    return templates.TemplateResponse(request, "session_new.html", {"page": "new", "notice": ""})
 
 
-@router.post("/sessions")
+@router.post("/sessions", response_model=None)
 async def open_folder(
     request: Request,
     files: list[UploadFile],
     who: Annotated[Identity, Depends(identity)],
     conditions: Annotated[list[UploadFile] | None, File()] = None,
-) -> RedirectResponse:
-    name, found = await opened(files)
-    number = await services(request).workspaces.open(
-        who.id(), who.name(), name, found, await chosen(conditions)
-    )
+) -> RedirectResponse | HTMLResponse:
+    config = services(request).settings
+    try:
+        name, found = await opened(files, config.folder_limit())
+        special = await chosen(conditions, config.conditions_limit())
+    except TooLargeError as error:
+        return templates.TemplateResponse(
+            request, "session_new.html", {"page": "new", "notice": str(error)}, status_code=413
+        )
+    number = await services(request).workspaces.open(who.id(), who.name(), name, found, special)
     return RedirectResponse(f"/sessions/{number}", status_code=303)
 
 
