@@ -5,42 +5,33 @@ from app.storage.relative import Relative
 
 
 class Layout(Protocol):
-    """Rules that turn identifiers and file names into storage keys."""
+    """Rules that turn owners, sessions and file names into storage keys; every key of a user
+    starts with the owner, so a key never reaches the files of another one."""
 
-    def policy(self, policy_id: int, name: str) -> str: ...
+    def folder(self, owner: str, session: int) -> str: ...
 
-    def package(self, policy_id: int) -> str: ...
+    def entry(self, owner: str, session: int, path: str) -> str: ...
 
-    def document(self, policy_id: int, path: str) -> str: ...
-
-    def source(self, declaration_id: int, name: str) -> str: ...
-
-    def result(self, declaration_id: int, number: str) -> str: ...
+    def result(self, owner: str, session: int, declaration_id: int, number: str) -> str: ...
 
     def knowledge(self, ruleset_id: int, name: str) -> str: ...
 
 
 @final
 class Keys:
-    """Layout of the storage tree, where a file name never contains a path."""
+    """Layout of the storage tree, where an owner and a file name never contain a path."""
 
     __slots__ = ()
 
-    def policy(self, policy_id: int, name: str) -> str:
-        return f"policies/{policy_id}/documents/{self._name(name)}"
+    def folder(self, owner: str, session: int) -> str:
+        return f"{self._name(owner)}/{session}/folder"
 
-    def package(self, policy_id: int) -> str:
-        return f"policies/{policy_id}/documents"
+    def entry(self, owner: str, session: int, path: str) -> str:
+        return f"{self.folder(owner, session)}/{Relative(path).path()}"
 
-    def document(self, policy_id: int, path: str) -> str:
-        return f"{self.package(policy_id)}/{Relative(path).path()}"
-
-    def source(self, declaration_id: int, name: str) -> str:
-        return f"declarations/{declaration_id}/source/{self._name(name)}"
-
-    def result(self, declaration_id: int, number: str) -> str:
+    def result(self, owner: str, session: int, declaration_id: int, number: str) -> str:
         return (
-            f"declarations/{declaration_id}/result/"
+            f"{self._name(owner)}/{session}/results/{declaration_id}/"
             f"{self._name(number.replace('/', '_'))} – результат проверки.xlsx"
         )
 

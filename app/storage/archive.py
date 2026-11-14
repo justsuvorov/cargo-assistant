@@ -1,6 +1,6 @@
 import io
 from typing import Final, Protocol, final
-from zipfile import BadZipFile, ZipFile, ZipInfo
+from zipfile import ZIP_DEFLATED, BadZipFile, ZipFile, ZipInfo
 
 from app.storage.errors import BrokenError
 from app.storage.relative import Relative
@@ -82,3 +82,20 @@ class Unzipped:
             return raw.decode("utf-8")
         except UnicodeDecodeError:
             return raw.decode("cp866", errors="replace")
+
+
+@final
+class Zipped:
+    """Zip archive made of files that are already in memory, under the names they have."""
+
+    __slots__ = ("_files",)
+
+    def __init__(self, files: tuple[Stored, ...]) -> None:
+        self._files: Final = files
+
+    def data(self) -> bytes:
+        buffer = io.BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as archive:
+            for file in self._files:
+                archive.writestr(file.name(), file.data())
+        return buffer.getvalue()

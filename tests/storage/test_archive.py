@@ -5,7 +5,7 @@ import zlib
 
 from hamcrest import assert_that, contains_inanyorder, equal_to, raises
 
-from app.storage.archive import Unzipped
+from app.storage.archive import Blob, Unzipped, Zipped
 from app.storage.errors import BrokenError, EscapeError
 
 
@@ -79,4 +79,14 @@ def test_refuses_data_that_is_not_an_archive() -> None:
         lambda: Unzipped(b"not a zip").files(),
         raises(BrokenError),
         "Unzipped does not refuse a broken archive",
+    )
+
+
+def test_zips_files_that_unzip_back_with_the_same_names_and_data() -> None:
+    data = {"Файл один.xlsx": b"1", "two.xlsx": b"22"}
+    zipped = Zipped(tuple(Blob(name, content) for name, content in data.items())).data()
+    assert_that(
+        {file.name(): file.data() for file in Unzipped(zipped).files()},
+        equal_to(data),
+        "Zipped files do not come back with their names and data",
     )
