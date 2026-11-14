@@ -13,14 +13,15 @@ from app.core.clock import Utc
 from app.core.journal import Sink
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings, Settings
+from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.folios import Folios
-from app.jobs.intake import Intake
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
+from app.jobs.workspaces import Filing
 from app.storage.disk import DiskStorage
 from app.storage.layout import Keys
-from app.web import api, login, pages, policies, results
+from app.web import api, login, pages, policies, results, sessions
 from app.web.services import Services
 
 
@@ -58,9 +59,14 @@ def create_app(settings: Settings) -> FastAPI:
         settings,
         database,
         queue,
-        Intake(database, queue, storage, Keys(), Utc()),
-        Shelving(database, queue, storage, Keys()),
-        Folios(database, queue, Utc()),
+        Filing(
+            database,
+            queue,
+            (storage, Keys(), Workbench(storage, settings.soffice())),
+            Utc(),
+        ),
+        Shelving(database, queue),
+        Folios(database, Utc()),
         passport(settings),
         session(settings, seal),
         seal,
@@ -73,6 +79,7 @@ def create_app(settings: Settings) -> FastAPI:
     application.include_router(login.router)
     application.include_router(policies.router)
     application.include_router(pages.router)
+    application.include_router(sessions.router)
     application.include_router(results.router)
     application.include_router(api.router)
     return application

@@ -16,8 +16,8 @@ from app.jobs.checking import Postponed, Postponing, Unconfigured
 from app.jobs.database import Database
 from app.jobs.errors import WaitingError
 from app.jobs.folios import Folios
-from app.jobs.models import Base, Declaration, Policy
-from app.jobs.queue import Queue, Snapshot
+from app.jobs.models import Base, Declaration, Job, Policy
+from app.jobs.queue import Snapshot
 from app.jobs.stages import Benches, Kit, Profiled, Routed, Standard, UnknownKindError
 from app.jobs.versions import Stamp
 from app.llm.errors import MisconfiguredError
@@ -46,76 +46,93 @@ def snapshot() -> Snapshot:
     return Snapshot(1, "reconcile", "running", "", 0, 1, "", {}, {"declaration_id": 1})
 
 
-async def prepare(path: Path, *, bound: bool) -> tuple[Database, Folios]:
+async def prepare(path: Path, *, bound: bool, build: str = "") -> tuple[Database, Folios]:
     database = Database(f"sqlite+aiosqlite:///{path / 's.db'}")
     async with database.session() as session:
         connection = await session.connection()
         await connection.run_sync(Base.metadata.create_all)
-        session.add(Policy(access_group="g"))
+        if build:
+            session.add(
+                Job(
+                    kind="profile_build",
+                    status=build,
+                    created_at=datetime(2026, 1, 1),
+                    updated_at=datetime(2026, 1, 1),
+                )
+            )
+            await session.flush()
+        session.add(Policy(owner="u", package_sha="s", job_id=1 if build else None))
         await session.flush()
         session.add(
             Declaration(
                 policy_id=1 if bound else None,
-                access_group="g",
+                owner="u",
                 file_name="a.xlsx",
                 created_at=datetime(2026, 1, 1),
             )
         )
         await session.commit()
-    return database, Folios(database, Queue(database, Utc()), Utc())
+    return database, Folios(database, Utc())
 
 
-async def waits_for_approved_profile_of_bound_policy(tmp_path: Path) -> str:
-    database, folio = await prepare(tmp_path, bound=True)
-    await folio.draft(1, Profile(number="A", issued=date(2025, 1, 1), insurer="B", clauses={}))
+async def passes(tmp_path: Path, *, bound: bool, build: str, profile: str) -> str:
+    database, folio = await prepare(tmp_path, bound=bound, build=build)
+    if profile:
+        await folio.draft(1, Profile(number="A", issued=date(2025, 1, 1), insurer="B", clauses={}))
+    if profile == "approved":
+        await folio.approve(1, 1, "owner")
     try:
         await Profiled(folio, database).run(snapshot())
     except WaitingError as error:
         return str(error)
     finally:
         await database.close()
-    return ""
+    return "passed"
 
 
-def test_waits_for_approved_profile_of_bound_policy(tmp_path: Path) -> None:
+def test_waits_for_the_build_of_the_profile_that_goes(tmp_path: Path) -> None:
     assert_that(
-        asyncio.run(asyncio.wait_for(waits_for_approved_profile_of_bound_policy(tmp_path), 30)),
-        equal_to("Ожидает профиль полиса"),
-        "Declaration of a policy with a draft profile does not wait",
+        asyncio.run(
+            asyncio.wait_for(passes(tmp_path, bound=True, build="running", profile=""), 30)
+        ),
+        equal_to("Ожидает сборки профиля полиса"),
+        "Declaration does not wait for the profile that is being built",
     )
 
 
-async def passes_declaration_without_policy(tmp_path: Path) -> bool:
-    database, folio = await prepare(tmp_path, bound=False)
-    await Profiled(folio, database).run(snapshot())
-    await database.close()
-    return True
+def test_passes_with_a_draft_profile_without_waiting_for_an_expert(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(passes(tmp_path, bound=True, build="done", profile="draft"), 30)
+        ),
+        equal_to("passed"),
+        "Declaration of a policy with a draft profile does not go on without an expert",
+    )
+
+
+def test_passes_with_an_approved_profile(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(passes(tmp_path, bound=True, build="done", profile="approved"), 30)
+        ),
+        equal_to("passed"),
+        "Declaration of a policy with an approved profile is not let through",
+    )
+
+
+def test_passes_without_a_profile_when_the_build_failed(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(passes(tmp_path, bound=True, build="failed", profile=""), 30)),
+        equal_to("passed"),
+        "Declaration does not go on after the build of its profile failed",
+    )
 
 
 def test_passes_declaration_without_policy(tmp_path: Path) -> None:
     assert_that(
-        asyncio.run(asyncio.wait_for(passes_declaration_without_policy(tmp_path), 30)),
-        equal_to(True),
+        asyncio.run(asyncio.wait_for(passes(tmp_path, bound=False, build="", profile=""), 30)),
+        equal_to("passed"),
         "Declaration that is not bound to a policy is held back",
-    )
-
-
-async def passes_declaration_of_policy_with_approved_profile(tmp_path: Path) -> bool:
-    database, folio = await prepare(tmp_path, bound=True)
-    await folio.draft(1, Profile(number="A", issued=date(2025, 1, 1), insurer="B", clauses={}))
-    await folio.approve(1, 1, "expert")
-    await Profiled(folio, database).run(snapshot())
-    await database.close()
-    return True
-
-
-def test_passes_declaration_of_policy_with_approved_profile(tmp_path: Path) -> None:
-    assert_that(
-        asyncio.run(
-            asyncio.wait_for(passes_declaration_of_policy_with_approved_profile(tmp_path), 30)
-        ),
-        equal_to(True),
-        "Declaration of a policy with an approved profile is not let through",
     )
 
 

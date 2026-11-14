@@ -1,14 +1,18 @@
 import asyncio
+import os
 import random
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
+import pytest
 from hamcrest import assert_that, equal_to
-from sqlalchemy import select
+from sqlalchemy import make_url, select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.clock import Utc
 from app.jobs.database import Database
-from app.jobs.models import Base, Job, JobRun
+from app.jobs.models import Base, Declaration, Job, JobRun, Policy, PolicyProfile
 from app.jobs.queue import Queue
 
 
@@ -246,4 +250,97 @@ def test_closes_open_attempt_as_error_when_attempts_are_exhausted(tmp_path: Path
         asyncio.run(asyncio.wait_for(attempt_after_revive(tmp_path, 1), 30)),
         equal_to(("error", "AttemptsExceeded", "error")),
         "Exhausted job does not close its open attempt and session as errors",
+    )
+
+
+async def resumed_job_of_policy(database: Database, *, profile: bool, build: str) -> str:
+    queue = Queue(database, Utc())
+    async with database.session() as session:
+        built = await queue.add(session, "profile_build", {"policy_id": 1})
+        waiting = await queue.add(session, "reconcile", {"declaration_id": 1})
+        session.add(Policy(owner="u", package_sha="s", job_id=built))
+        await session.flush()
+        session.add(
+            Declaration(
+                owner="u",
+                policy_id=1,
+                job_id=waiting,
+                file_name="a",
+                created_at=datetime(2026, 1, 1),
+            )
+        )
+        if profile:
+            session.add(PolicyProfile(policy_id=1, version=1, body={}, status="draft"))
+        await session.commit()
+    await queue.claim(2)
+    await queue.wait(waiting, "Ожидает сборки профиля полиса")
+    if build == "failed":
+        await queue.fail(built, "нет модели")
+    await queue.resume()
+    status = (await queue.snapshot(waiting)).status
+    await database.close()
+    return status
+
+
+async def on_sqlite(tmp_path: Path, *, profile: bool, build: str) -> str:
+    return await resumed_job_of_policy(await prepare(tmp_path), profile=profile, build=build)
+
+
+def test_resumes_waiting_job_when_policy_has_a_profile(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(on_sqlite(tmp_path, profile=True, build="running"), 30)),
+        equal_to("queued"),
+        "Job is not resumed when the profile of its policy appeared",
+    )
+
+
+def test_resumes_waiting_job_when_build_of_the_profile_failed(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(on_sqlite(tmp_path, profile=False, build="failed"), 30)),
+        equal_to("queued"),
+        "Job is not resumed when the build of the profile failed",
+    )
+
+
+def test_keeps_waiting_job_while_the_profile_is_being_built(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(on_sqlite(tmp_path, profile=False, build="running"), 30)),
+        equal_to("waiting"),
+        "Job does not keep waiting while its profile is still being built",
+    )
+
+
+async def administer(url: str, statement: str) -> None:
+    engine = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    async with engine.connect() as connection:
+        await connection.exec_driver_sql(statement)
+    await engine.dispose()
+
+
+async def on_postgres(*, profile: bool, build: str) -> str:
+    base = os.environ["TEST_DATABASE_URL"]
+    name = f"t36_{uuid.uuid4().hex}"
+    await administer(base, f"CREATE DATABASE {name}")
+    try:
+        database = Database(make_url(base).set(database=name).render_as_string(False))
+        async with database.session() as session:
+            connection = await session.connection()
+            await connection.run_sync(Base.metadata.create_all)
+            await session.commit()
+        return await resumed_job_of_policy(database, profile=profile, build=build)
+    finally:
+        await administer(base, f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset")
+def test_resumes_waiting_jobs_of_a_policy_with_a_profile_or_a_failed_build_on_postgres() -> None:
+    found = [
+        asyncio.run(asyncio.wait_for(on_postgres(profile=profile, build=build), 60))
+        for profile, build in ((True, "running"), (False, "failed"), (False, "running"))
+    ]
+    assert_that(
+        found,
+        equal_to(["queued", "queued", "waiting"]),
+        "Waiting jobs are not resumed by the profile or the failed build on Postgres",
     )

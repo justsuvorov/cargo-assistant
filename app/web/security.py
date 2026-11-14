@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.auth.errors import DeniedError
 from app.auth.identity import Identity
-from app.jobs.models import Declaration, Policy
+from app.jobs.models import Declaration, Policy, Workspace
 from app.web.services import Services
 
 COOKIE = "cargo_session"
@@ -54,20 +54,43 @@ def identity(request: Request) -> Identity:
     return who
 
 
-def expert(request: Request) -> Identity:
-    who = identity(request)
-    if not who.allows("expert"):
-        raise HTTPException(status_code=403, detail="Действие доступно только эксперту")
-    return who
-
-
 async def visible(request: Request, who: Identity, job_id: int) -> None:
     async with services(request).database.session() as session:
-        groups = [
-            *await session.scalars(
-                select(Declaration.access_group).where(Declaration.job_id == job_id)
-            ),
-            *await session.scalars(select(Policy.access_group).where(Policy.job_id == job_id)),
+        owners = [
+            *await session.scalars(select(Declaration.owner).where(Declaration.job_id == job_id)),
+            *await session.scalars(select(Policy.owner).where(Policy.job_id == job_id)),
         ]
-    if not any(who.sees(group) for group in groups):
+    if who.id() not in owners:
         raise HTTPException(status_code=404, detail=f"Задача {job_id} не найдена")
+
+
+async def workspace_of(request: Request, who: Identity, workspace_id: int) -> Workspace:
+    async with services(request).database.session() as session:
+        found = await session.scalar(
+            select(Workspace).where(Workspace.id == workspace_id, Workspace.owner == who.id())
+        )
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"Сессия {workspace_id} не найдена")
+    return found
+
+
+async def declaration_of(request: Request, who: Identity, declaration_id: int) -> Declaration:
+    async with services(request).database.session() as session:
+        found = await session.scalar(
+            select(Declaration).where(
+                Declaration.id == declaration_id, Declaration.owner == who.id()
+            )
+        )
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"Декларация {declaration_id} не найдена")
+    return found
+
+
+async def policy_of(request: Request, who: Identity, policy_id: int) -> Policy:
+    async with services(request).database.session() as session:
+        found = await session.scalar(
+            select(Policy).where(Policy.id == policy_id, Policy.owner == who.id())
+        )
+    if found is None:
+        raise HTTPException(status_code=404, detail=f"Полис {policy_id} не найден")
+    return found

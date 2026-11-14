@@ -2,12 +2,13 @@ from dataclasses import dataclass
 from datetime import timedelta
 from typing import Final, Protocol, final
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from app.core.clock import Clock
 from app.jobs.database import Sessions
-from app.jobs.models import Declaration, Job, JobRun
+from app.jobs.models import Declaration, Job, JobRun, Policy, PolicyProfile
 
 
 @final
@@ -72,7 +73,7 @@ class Jobs(Protocol):
 
     async def wait(self, job_id: int, reason: str) -> None: ...
 
-    async def release(self, policy_id: int) -> int: ...
+    async def resume(self) -> int: ...
 
     async def revive(self, idle: float, attempts: int) -> int: ...
 
@@ -167,15 +168,20 @@ class Queue:
     async def wait(self, job_id: int, reason: str) -> None:
         await self._change(job_id, status="waiting", error=reason, locked_at=None)
 
-    async def release(self, policy_id: int) -> int:
+    async def resume(self) -> int:
+        built = aliased(Job)
+        ready = select(Policy.id).where(
+            or_(
+                Policy.id.in_(select(PolicyProfile.policy_id)),
+                Policy.job_id.in_(select(built.id).where(built.status.in_(("done", "failed")))),
+            )
+        )
         async with self._sessions.session() as session:
             found = await session.execute(
                 update(Job)
                 .where(
                     Job.status == "waiting",
-                    Job.id.in_(
-                        select(Declaration.job_id).where(Declaration.policy_id == policy_id)
-                    ),
+                    Job.id.in_(select(Declaration.job_id).where(Declaration.policy_id.in_(ready))),
                 )
                 .values(
                     status="queued",

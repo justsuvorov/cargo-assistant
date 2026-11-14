@@ -8,10 +8,9 @@ from hamcrest import assert_that, contains_string, equal_to, raises
 
 from app.core.clock import Utc
 from app.jobs.database import Database
-from app.jobs.errors import NotReadyError, WaitingError
+from app.jobs.errors import MissingProfileError, NotReadyError
 from app.jobs.folios import Folios
-from app.jobs.models import Base, Declaration, Policy
-from app.jobs.queue import Queue
+from app.jobs.models import Base, Policy
 from app.policy.schema.profile import Profile
 
 
@@ -29,19 +28,19 @@ def profile(number: str = "", issued: date = date.min, insurer: str = "") -> Pro
     return Profile(number=number, issued=issued, insurer=insurer, clauses={})
 
 
-async def prepare(path: Path) -> tuple[Database, Queue, int]:
+async def prepare(path: Path) -> tuple[Database, int]:
     database = Database(f"sqlite+aiosqlite:///{path / 'f.db'}")
     async with database.session() as session:
         connection = await session.connection()
         await connection.run_sync(Base.metadata.create_all)
-        session.add(Policy(access_group="g", number="", insured=""))
+        session.add(Policy(owner="u", package_sha="s", number="", insured=""))
         await session.commit()
-    return database, Queue(database, Utc()), 1
+    return database, 1
 
 
 async def numbers_drafts_one_after_another(tmp_path: Path) -> int:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
     await folio.draft(policy, profile())
     await folio.draft(policy, profile("A"))
     latest = await folio.latest(policy)
@@ -58,8 +57,8 @@ def test_numbers_drafts_one_after_another(tmp_path: Path) -> None:
 
 
 async def refuses_profile_without_issue_date(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date.min, "B"))
     try:
         await folio.approve(policy, 1, "expert")
@@ -79,8 +78,8 @@ def test_refuses_profile_without_issue_date(tmp_path: Path) -> None:
 
 
 async def refuses_profile_without_number_and_insurer(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
     await folio.draft(policy, profile("", date(2025, 1, 1), " "))
     try:
         await folio.approve(policy, 1, "expert")
@@ -100,9 +99,9 @@ def test_refuses_profile_without_number_and_insurer(tmp_path: Path) -> None:
 
 
 async def approves_and_remembers_who_and_when(tmp_path: Path) -> tuple[str, str, datetime | None]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     moment = datetime(2026, 5, 4, 12, 0)
-    folio = Folios(database, queue, Fixed(moment))
+    folio = Folios(database, Fixed(moment))
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
     await folio.approve(policy, 1, "ivanov")
     latest = await folio.latest(policy)
@@ -119,8 +118,8 @@ def test_approves_and_remembers_who_and_when(tmp_path: Path) -> None:
 
 
 async def refuses_approval_of_outdated_version(tmp_path: Path) -> bool:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
     await folio.draft(policy, profile("A2", date(2025, 1, 1), "B"))
     try:
@@ -140,83 +139,87 @@ def test_refuses_approval_of_outdated_version(tmp_path: Path) -> None:
     )
 
 
-async def waits_for_profile_while_only_draft_exists(tmp_path: Path) -> bool:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
+async def takes_draft_while_nobody_approved_a_version(tmp_path: Path) -> tuple[str, int]:
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
+    taken = await folio.taken(policy)
+    await database.close()
+    return taken.status, taken.version
+
+
+def test_takes_draft_while_nobody_approved_a_version(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(takes_draft_while_nobody_approved_a_version(tmp_path), 30)),
+        equal_to(("draft", 1)),
+        "Draft is not used for reconciliation while no version is approved",
+    )
+
+
+async def answers_from_approved_version_after_new_draft(tmp_path: Path) -> tuple[bool, str, int]:
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
+    number = uuid.uuid4().hex
+    await folio.draft(policy, profile(number, date(2025, 1, 1), "B"))
+    await folio.approve(policy, 1, "expert")
+    await folio.draft(policy, profile("other", date(2025, 1, 1), "B"))
+    taken = await folio.taken(policy)
+    await database.close()
+    return taken.policy.number() == number, taken.status, taken.version
+
+
+def test_answers_from_approved_version_after_new_draft(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(answers_from_approved_version_after_new_draft(tmp_path), 30)),
+        equal_to((True, "approved", 1)),
+        "Approved profile does not stay in force after a new draft",
+    )
+
+
+async def takes_problems_of_the_package_with_the_profile(tmp_path: Path) -> tuple[bool]:
+    database, policy = await prepare(tmp_path)
+    folio = Folios(database, Utc())
+    problem = f"Файл {uuid.uuid4().hex} не читается"
+    await folio.draft(
+        policy,
+        Profile(number="A", issued=date(2025, 1, 1), insurer="B", clauses={}, problems=(problem,)),
+    )
+    taken = await folio.taken(policy)
+    await database.close()
+    return (taken.problems == (problem,),)
+
+
+def test_takes_problems_of_the_package_with_the_profile(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(takes_problems_of_the_package_with_the_profile(tmp_path), 30)),
+        equal_to((True,)),
+        "Problems of the package do not come with the profile",
+    )
+
+
+async def takes_nothing_from_policy_without_profile(tmp_path: Path) -> bool:
+    database, policy = await prepare(tmp_path)
     try:
-        await folio.approved(policy)
-    except WaitingError:
+        await Folios(database, Utc()).taken(policy)
+    except MissingProfileError:
         return True
     finally:
         await database.close()
     return False
 
 
-def test_waits_for_profile_while_only_draft_exists(tmp_path: Path) -> None:
+def test_takes_nothing_from_policy_without_profile(tmp_path: Path) -> None:
     assert_that(
-        asyncio.run(asyncio.wait_for(waits_for_profile_while_only_draft_exists(tmp_path), 30)),
+        asyncio.run(asyncio.wait_for(takes_nothing_from_policy_without_profile(tmp_path), 30)),
         equal_to(True),
-        "Draft profile is not treated as missing for reconciliation",
-    )
-
-
-async def answers_from_approved_version_after_new_draft(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
-    number = uuid.uuid4().hex
-    await folio.draft(policy, profile(number, date(2025, 1, 1), "B"))
-    await folio.approve(policy, 1, "expert")
-    await folio.draft(policy, profile("other", date(2025, 1, 1), "B"))
-    answer = (await folio.approved(policy)).number()
-    await database.close()
-    return f"{answer == number}"
-
-
-def test_answers_from_approved_version_after_new_draft(tmp_path: Path) -> None:
-    assert_that(
-        asyncio.run(asyncio.wait_for(answers_from_approved_version_after_new_draft(tmp_path), 30)),
-        equal_to("True"),
-        "Approved profile does not stay in force after a new draft",
-    )
-
-
-async def releases_waiting_job_of_the_policy_on_approval(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
-    folio = Folios(database, queue, Utc())
-    async with database.session() as session:
-        job = await queue.add(session, "reconcile", {"declaration_id": 1})
-        session.add(
-            Declaration(
-                policy_id=policy,
-                job_id=job,
-                access_group="g",
-                file_name="a.xlsx",
-                created_at=datetime(2026, 1, 1),
-            )
-        )
-        await session.commit()
-    await queue.claim(1)
-    await queue.wait(job, "Ожидает профиль полиса")
-    await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
-    await folio.approve(policy, 1, "expert")
-    status = (await queue.snapshot(job)).status
-    await database.close()
-    return status
-
-
-def test_releases_waiting_job_of_the_policy_on_approval(tmp_path: Path) -> None:
-    assert_that(
-        asyncio.run(asyncio.wait_for(releases_waiting_job_of_the_policy_on_approval(tmp_path), 30)),
-        equal_to("queued"),
-        "Approval does not put the waiting job back into the queue",
+        "Policy without a profile does not say so",
     )
 
 
 async def fills_requisites(tmp_path: Path) -> tuple[str, str]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     number = f"N{random.randint(1, 999)}"
-    await Folios(database, queue, Utc()).draft(policy, profile(number, insurer="Икс"))
+    await Folios(database, Utc()).draft(policy, profile(number, insurer="Икс"))
     async with database.session() as session:
         row = await session.get(Policy, policy)
     await database.close()
@@ -233,9 +236,9 @@ def test_fills_policy_requisites_from_draft(tmp_path: Path) -> None:
 
 
 async def drafts_unknown_policy(tmp_path: Path) -> None:
-    database, queue, _ = await prepare(tmp_path)
+    database, _ = await prepare(tmp_path)
     try:
-        await Folios(database, queue, Utc()).draft(99, profile())
+        await Folios(database, Utc()).draft(99, profile())
     finally:
         await database.close()
 

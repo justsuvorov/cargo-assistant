@@ -1,16 +1,8 @@
-{% set labels = {"queued": "В очереди", "waiting": "Ожидает профиль полиса", "running": "Выполняется", 'done': 'Готово', 'failed': 'Ошибка'} %}
-{% set reasons = {
-  "policy_missing": "В декларации не указан номер генерального полиса",
-  "policy_unreadable": "Номер генерального полиса в декларации не распознан",
-  "policy_unknown": "Полис с таким номером не найден среди полисов вашей группы",
-  "policy_ambiguous": "Найдено несколько полисов с таким номером"
-} %}
-<span id="job-{{ job.id }}" class="job"
-  {% if not job.finished() %}hx-get="/jobs/{{ job.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+{% set labels = {"queued": "В очереди", "waiting": "Ожидает сборки профиля полиса", "running": "Выполняется", "done": "Готово", "failed": "Ошибка"} %}
+{% set stages = {"ingest": "чтение", "fields": "разбор", "normalize": "разбор", "bind": "привязка", "profile": "профиль полиса", "check": "проверки", "semantic": "смысловые проверки", "report": "файл результата", "fetch": "загрузка файлов", "convert": "преобразование", "read": "чтение пакета", "extract": "извлечение пунктов", "save": "сохранение"} %}
+<span id="job-{{ job.id }}" class="job">
   <span class="status-{{ job.status }}">{{ labels[job.status] }}</span>
   <progress value="{{ job.progress }}" max="100"></progress>
-  {{ job.progress }}% {% if job.stage %}({{ job.stage }}){% endif %}
-  {% if job.status == 'done' and result %}<a href="/declarations/{{ result }}">Результат</a>{% endif %}
+  {{ job.progress }}% {% if job.stage %}({{ stages[job.stage] or job.stage }}){% endif %}
   {% if job.error %}<em>{{ job.error }}</em>{% endif %}
-  {% if note in reasons %}<em class="binding">{{ reasons[note] }}: пункты полиса будут отмечены «требует проверки»</em>{% endif %}
 </span>

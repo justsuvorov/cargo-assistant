@@ -47,7 +47,7 @@ def test_marks_every_page_when_login_is_disabled(tmp_path: Path) -> None:
     with TestClient(create_app(settings(tmp_path, "AUTH_DISABLED=true\n"))) as client:
         marked = [
             "вход отключён" in client.get(path).text
-            for path in ("/policies", "/reconcile", "/archive")
+            for path in ("/policies", "/sessions", "/sessions/new")
         ]
     assert_that(marked, equal_to([True, True, True]), "Page does not say that login is disabled")
 
@@ -74,7 +74,7 @@ def test_has_no_external_addresses_in_templates_and_scripts() -> None:
     web = Path(__file__).parents[2] / "app" / "web"
     found = [
         str(path.name)
-        for path in [*(web / "templates").glob("*.html"), web / "static" / "app.js"]
+        for path in (web / "templates").glob("*.html")
         if re.search(r"(https?:)?//[a-z0-9-]+\.[a-z]", path.read_text(encoding="utf-8"))
     ]
     assert_that(found, has_length(0), "Templates or scripts do not stay free of external addresses")

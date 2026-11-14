@@ -9,6 +9,7 @@ def test_declares_all_tables_of_the_data_model() -> None:
         equal_to(
             {
                 "policies",
+                "workspaces",
                 "policy_documents",
                 "policy_profiles",
                 "declarations",
@@ -22,5 +23,5 @@ def test_declares_all_tables_of_the_data_model() -> None:
                 "job_runs",
             }
         ),
-        "Data model does not declare the twelve tables",
+        "Data model does not declare the thirteen tables",
     )

@@ -18,7 +18,6 @@ from app.policy.extraction import Extraction
 from app.policy.package import Package
 from app.policy.schema.profile import Profile
 from app.storage.disk import Storage
-from app.storage.layout import Layout
 
 _CONVERSIONS = 4
 
@@ -114,24 +113,22 @@ class Workbench:
 
 @final
 class Fetching:
-    """Stage that copies the files of the package from the storage to a working folder."""
+    """Stage that copies the files of the folder of the policy from the storage to a working
+    folder."""
 
-    __slots__ = ("_bench", "_folder", "_layout")
+    __slots__ = ("_bench", "_folder", "_packages")
 
-    def __init__(self, bench: Bench, layout: Layout, folder: Cell[Path]) -> None:
+    def __init__(self, bench: Bench, packages: Packages, folder: Cell[Path]) -> None:
         self._bench: Final = bench
-        self._layout: Final = layout
+        self._packages: Final = packages
         self._folder: Final = folder
 
     def name(self) -> str:
         return "fetch"
 
     async def run(self, job: Snapshot) -> None:
-        self._folder.put(
-            await asyncio.to_thread(
-                self._bench.unpack, self._layout.package(int(str(job.payload["policy_id"])))
-            )
-        )
+        prefix = await self._packages.prefix(int(str(job.payload["policy_id"])))
+        self._folder.put(await asyncio.to_thread(self._bench.unpack, prefix))
 
 
 @final

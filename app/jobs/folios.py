@@ -7,9 +7,8 @@ from sqlalchemy import select
 from app.core.clock import Clock
 from app.domain.policy import Policy as Reference
 from app.jobs.database import Sessions
-from app.jobs.errors import MissingProfileError, NotReadyError, WaitingError
+from app.jobs.errors import MissingProfileError, NotReadyError
 from app.jobs.models import Policy, PolicyProfile
-from app.jobs.queue import Jobs
 from app.policy.approved import Approved
 from app.policy.schema.profile import Profile
 
@@ -24,6 +23,18 @@ class Version:
     profile: Profile
     approved_by: str
     approved_at: datetime | None
+
+
+@final
+@dataclass(frozen=True)
+class Taken:
+    """Profile that a declaration is checked by: the policy that answers from it, the version,
+    its status (approved, draft, or missing when there is none) and the problems of the package."""
+
+    policy: Reference
+    version: int
+    status: str
+    problems: tuple[str, ...]
 
 
 @final
@@ -57,21 +68,19 @@ class Folio(Protocol):
 
     async def approve(self, policy_id: int, version: int, who: str) -> None: ...
 
-    async def approved(self, policy_id: int) -> Reference: ...
-
-    async def version(self, policy_id: int) -> int: ...
+    async def taken(self, policy_id: int) -> Taken: ...
 
 
 @final
 class Folios:
     """Folio in the database. A draft or an edit is always a new version; the one in force for
-    reconciliation is the latest approved version, so a new draft does not take it away."""
+    reconciliation is the latest approved version, so a new draft does not take it away, and
+    while nobody has approved a version the latest draft is used."""
 
-    __slots__ = ("_clock", "_jobs", "_sessions")
+    __slots__ = ("_clock", "_sessions")
 
-    def __init__(self, sessions: Sessions, jobs: Jobs, clock: Clock) -> None:
+    def __init__(self, sessions: Sessions, clock: Clock) -> None:
         self._sessions: Final = sessions
-        self._jobs: Final = jobs
         self._clock: Final = clock
 
     async def draft(self, policy_id: int, profile: Profile) -> int:
@@ -137,29 +146,26 @@ class Folios:
             current.approved_by = who
             current.approved_at = self._clock.now()
             await session.commit()
-        await self._jobs.release(policy_id)
 
-    async def approved(self, policy_id: int) -> Reference:
+    async def taken(self, policy_id: int) -> Taken:
         async with self._sessions.session() as session:
-            row = await session.scalar(
-                select(PolicyProfile)
-                .where(PolicyProfile.policy_id == policy_id, PolicyProfile.status == "approved")
-                .order_by(PolicyProfile.version.desc())
-                .limit(1)
-            )
-        if row is None:
-            raise WaitingError("Ожидает профиль полиса")
-        return Approved(self._version(row).profile)
-
-    async def version(self, policy_id: int) -> int:
-        async with self._sessions.session() as session:
-            found = await session.scalar(
-                select(PolicyProfile.version)
-                .where(PolicyProfile.policy_id == policy_id, PolicyProfile.status == "approved")
-                .order_by(PolicyProfile.version.desc())
-                .limit(1)
-            )
-        return found or 0
+            rows = (
+                await session.scalars(
+                    select(PolicyProfile)
+                    .where(PolicyProfile.policy_id == policy_id)
+                    .order_by(PolicyProfile.version.desc())
+                )
+            ).all()
+        if not rows:
+            raise MissingProfileError(f"У полиса {policy_id} ещё нет профиля")
+        row = next((each for each in rows if each.status == "approved"), rows[0])
+        profile = self._version(row).profile
+        return Taken(
+            Approved(profile),
+            row.version,
+            "approved" if row.status == "approved" else "draft",
+            profile.problems,
+        )
 
     def _version(self, row: PolicyProfile) -> Version:
         return Version(

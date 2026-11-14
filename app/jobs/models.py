@@ -23,15 +23,37 @@ class Base(DeclarativeBase):
 
 
 class Policy(Base):
-    """General policy with the insured party, the group that may see its data and its last build."""
+    """General policy of one owner with its insured party, the folder it was read from and its
+    last build; the folder is told apart by the checksum of the files of the policy and the
+    addenda, so the same files of the same owner are one policy."""
 
     __tablename__ = "policies"
+    __table_args__ = (UniqueConstraint("owner", "package_sha", name="uq_policy_package"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     number: Mapped[str] = mapped_column(String(64), default="", index=True)
     insured: Mapped[str] = mapped_column(String(255), default="")
-    access_group: Mapped[str] = mapped_column(String(128), index=True)
+    owner: Mapped[str] = mapped_column(String(128), default="", index=True)
+    package_sha: Mapped[str] = mapped_column(String(64), default="")
+    package_key: Mapped[str] = mapped_column(String(512), default="")
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
+
+
+class Workspace(Base):
+    """Session of a user: the folder of a policy that the user opened, the declarations found in
+    it and the policy it is checked against; it belongs to one owner, the Keycloak subject."""
+
+    __tablename__ = "workspaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    owner: Mapped[str] = mapped_column(String(128), index=True)
+    owner_name: Mapped[str] = mapped_column(String(128), default="")
+    name: Mapped[str] = mapped_column(String(255), default="")
+    found: Mapped[list[str]] = mapped_column(JSON, default=list)
+    package_sha: Mapped[str] = mapped_column(String(64), default="")
+    policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
 
 class PolicyDocument(Base):
@@ -89,14 +111,17 @@ class Job(Base):
 
 
 class Declaration(Base):
-    """Uploaded declaration file that waits for, or already has, a reconciliation result."""
+    """Declaration of a session that waits for, or already has, a reconciliation result."""
 
     __tablename__ = "declarations"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
     job_id: Mapped[int | None] = mapped_column(ForeignKey("jobs.id"), nullable=True)
-    access_group: Mapped[str] = mapped_column(String(128), index=True)
+    owner: Mapped[str] = mapped_column(String(128), default="", index=True)
+    workspace_id: Mapped[int | None] = mapped_column(
+        ForeignKey("workspaces.id"), nullable=True, index=True
+    )
     file_name: Mapped[str] = mapped_column(String(255))
     file_key: Mapped[str] = mapped_column(String(512), default="")
     number: Mapped[str] = mapped_column(String(64), default="")
@@ -111,6 +136,7 @@ class Declaration(Base):
     code_version: Mapped[str] = mapped_column(String(64), default="")
     cards_version: Mapped[str] = mapped_column(String(64), default="")
     profile_version: Mapped[int] = mapped_column(Integer, default=0)
+    profile_status: Mapped[str] = mapped_column(String(16), default="")
     prompts_version: Mapped[str] = mapped_column(String(64), default="")
     model: Mapped[str] = mapped_column(String(128), default="")
 

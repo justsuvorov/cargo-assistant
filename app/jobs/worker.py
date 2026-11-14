@@ -45,6 +45,7 @@ class Shift:
         beaten = purged = float("-inf")
         while not stop.is_set():
             await self._jobs.revive(self._settings.timeout() * 2, self._settings.attempts())
+            await self._jobs.resume()
             for job_id in await self._jobs.claim(self._settings.jobs() - len(running)):
                 task = asyncio.create_task(self._run(job_id))
                 running.add(task)
@@ -65,9 +66,11 @@ class Shift:
 
     async def drain(self) -> int:
         count = 0
+        await self._jobs.resume()
         while claimed := await self._jobs.claim(self._settings.jobs()):
             await asyncio.gather(*(self._run(job_id) for job_id in claimed))
             count += len(claimed)
+            await self._jobs.resume()
         return count
 
     async def _run(self, job_id: int) -> None:

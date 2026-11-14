@@ -6,9 +6,9 @@ from app.auth.seal import Seal
 from app.core.settings import Settings
 from app.jobs.database import Sessions
 from app.jobs.folios import Folio
-from app.jobs.intake import Reception
 from app.jobs.packages import Packages
 from app.jobs.queue import Jobs
+from app.jobs.workspaces import Workspaces
 from app.storage.disk import Storage
 
 
@@ -19,7 +19,7 @@ class Services:
     settings: Settings
     database: Sessions
     jobs: Jobs
-    reception: Reception
+    workspaces: Workspaces
     packages: Packages
     folio: Folio
     passport: Passport

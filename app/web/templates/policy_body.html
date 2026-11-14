@@ -20,7 +20,7 @@
     <strong>Сборка профиля не удалась.</strong> {{ job.error }}
   </div>
   {% endif %}
-  {% if expert and job.finished() %}
+  {% if job.finished() %}
   <form method="post" action="/policies/{{ policy.id }}/rebuild">
     <button type="submit">Собрать профиль заново</button>
   </form>
@@ -28,12 +28,12 @@
 {% endif %}
 {% if version %}
   {% set profile = version.profile %}
-  {% set readonly = "" if expert else "readonly" %}
+  {% set readonly = "" %}
   <p>Версия профиля {{ version.number }}, {{ states[version.status] or version.status }}
-    {% if version.status == "approved" %}: подтвердил {{ version.approved_by }}, {{ version.approved_at }}{% endif %}</p>
+    {% if version.status == "approved" %}: подтвердил {{ version.approved_by }}, {{ version.approved_at }}{% else %}: не подтверждён, сверка идёт по этой версии, пока вы её не подтвердите{% endif %}</p>
   {% if profile.problems %}
   <div class="alert problems" role="alert">
-    <strong>Требует внимания эксперта ({{ profile.problems|length }})</strong>
+    <strong>Проблемы пакета полиса ({{ profile.problems|length }})</strong>
     <ul>{% for problem in profile.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
@@ -87,13 +87,11 @@
     <h2>Особые условия</h2>
     <ul>{% for item in profile.conditions %}<li>{{ item }}</li>{% endfor %}</ul>
     {% endif %}
-    {% if expert %}<p><button type="submit">Сохранить правки новой версией</button></p>{% endif %}
+    <p><button type="submit">Сохранить правки новой версией</button></p>
   </form>
-  {% if expert %}
   <form method="post" action="/policies/{{ policy.id }}/approve?version={{ version.number }}">
     <button type="submit" {{ "disabled" if gaps }}>Подтвердить профиль версии {{ version.number }}</button>
   </form>
-  {% endif %}
 {% elif not job or job.finished() %}
   <p>Профиля пока нет.</p>
 {% endif %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Мои сессии</h1>
+<p><a href="/sessions/new">Открыть новую папку</a></p>
+{% if rows %}
+<table>
+  <thead><tr><th>№</th><th>Папка</th><th>Создана</th><th>Деклараций</th><th>Состояние</th></tr></thead>
+  <tbody>
+  {% for row in rows %}
+  <tr>
+    <td><a href="/sessions/{{ row.workspace.id }}">{{ row.workspace.id }}</a></td>
+    <td>{{ row.workspace.name }}</td>
+    <td>{{ row.workspace.created_at }}</td>
+    <td>{{ row.count }}</td>
+    <td>{{ row.standing }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Сессий пока нет.</p>
+{% endif %}
+{% endblock %}

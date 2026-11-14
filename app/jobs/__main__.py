@@ -22,7 +22,6 @@ from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
 from app.llm.assembly import Configured
 from app.storage.disk import DiskStorage
-from app.storage.layout import Keys
 
 
 async def run() -> None:
@@ -36,7 +35,7 @@ async def run() -> None:
     journal = LogJournal(logging.getLogger("worker"))
     journal.info("Воркер запущен", 0, 0)
     queue = Queue(database, Utc())
-    folio = Folios(database, queue, Utc())
+    folio = Folios(database, Utc())
     gateway = Gateway(
         Configured(
             environment,
@@ -66,7 +65,7 @@ async def run() -> None:
         Building(
             bench,
             folio,
-            Shelving(database, queue, DiskStorage(settings.storage()), Keys()),
+            Shelving(database, queue),
             gateway,
             journal,
         ),

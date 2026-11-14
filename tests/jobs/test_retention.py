@@ -49,7 +49,7 @@ async def purges_by_boundary(
     database = await prepare(tmp_path)
     async with database.session() as session:
         session.add(Job(id=1, kind="reconcile", created_at=edge, updated_at=edge))
-        session.add(Declaration(access_group="g", file_name="n", created_at=edge))
+        session.add(Declaration(owner="u", file_name="n", created_at=edge))
         session.add(
             CheckResult(
                 declaration_id=1, line="1", field="f", status="s", reason="r", source="rule"

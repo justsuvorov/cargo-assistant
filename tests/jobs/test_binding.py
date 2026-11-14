@@ -10,29 +10,12 @@ from openpyxl.worksheet.worksheet import Worksheet
 from sqlalchemy import select
 
 from app.domain.errors import UnreadableError
-from app.jobs.binding import Binding, Ingesting, Matching, Numbering
-from app.jobs.building import Shelf, Workbench
+from app.jobs.binding import Binding, Ingesting
+from app.jobs.building import Workbench
 from app.jobs.database import Database
-from app.jobs.models import Base, Declaration, Policy
+from app.jobs.models import Base, Declaration, Policy, Workspace
 from app.jobs.queue import Snapshot
 from app.storage.disk import DiskStorage
-
-_CARD = """field: policy
-forms:
-  vertical: {{order: 2, title: "t"}}
-  psg: {{order: 2, title: "t"}}
-subject: "s"
-clause: number
-check: exact
-rule: "r"
-params:
-  parts: [number, date]
-  ignore: {ignore}
-if_empty: mismatch
-comments: {{match: "a", mismatch: "b", review: "c", policy_missing: "d",
-  policy_unreadable: "e", policy_unknown: "f", policy_ambiguous: "g"}}
-status: draft
-"""
 
 
 class Recording:
@@ -49,12 +32,6 @@ class Recording:
 
     def error(self, message: str, job_id: int, declaration_id: int) -> None:
         self.lines.append(f"{message}, job_id={job_id}, declaration_id={declaration_id}")
-
-
-def cards(folder: Path, ignore: str = '["№"]') -> Path:
-    (folder / "cards").mkdir(exist_ok=True)
-    (folder / "cards" / "policy.yaml").write_text(_CARD.format(ignore=ignore), encoding="utf-8")
-    return folder / "cards"
 
 
 def word() -> str:
@@ -98,18 +75,28 @@ def english(path: Path, policy: str, number: str, start: str) -> None:
     book.save(path)
 
 
-async def prepared(tmp_path: Path, name: str, numbers: tuple[tuple[str, str], ...]) -> Database:
+async def prepared(tmp_path: Path, name: str, *, with_policy: bool = True) -> Database:
     database = Database(f"sqlite+aiosqlite:///{tmp_path / 'b.db'}")
     async with database.session() as session:
         connection = await session.connection()
         await connection.run_sync(Base.metadata.create_all)
-        for number, group in numbers:
-            session.add(Policy(number=number, access_group=group))
+        session.add(Policy(owner="u", package_sha="s"))
+        await session.flush()
+        session.add(
+            Workspace(
+                owner="u",
+                policy_id=1 if with_policy else None,
+                found=[],
+                created_at=datetime(2026, 1, 1),
+            )
+        )
+        await session.flush()
         session.add(
             Declaration(
-                access_group="g",
+                owner="u",
+                workspace_id=1,
                 file_name=name,
-                file_key=f"declarations/1/source/{name}",
+                file_key=f"u/1/folder/{name}",
                 created_at=datetime(2026, 1, 1),
             )
         )
@@ -133,11 +120,9 @@ async def ingested(tmp_path: Path, make: str, policy: str, number: str, start: s
     storage = DiskStorage(tmp_path / "files")
     source = tmp_path / name
     {"ru": russian, "en": english}[make](source, policy, number, start)
-    storage.save(f"declarations/1/source/{name}", source.read_bytes())
-    database = await prepared(tmp_path, name, ())
-    await Ingesting(Workbench(storage, tmp_path / "home"), database, Shelf(), Recording()).run(
-        snapshot()
-    )
+    storage.save(f"u/1/folder/{name}", source.read_bytes())
+    database = await prepared(tmp_path, name)
+    await Ingesting(Workbench(storage, tmp_path / "home"), database, Recording()).run(snapshot())
     found = await row(database)
     await database.close()
     return found
@@ -182,10 +167,10 @@ def test_removes_the_work_folder_of_the_declaration_after_reading(tmp_path: Path
 
 async def ingest_garbage(tmp_path: Path) -> None:
     storage = DiskStorage(tmp_path / "files")
-    storage.save("declarations/1/source/a.xlsx", b"not a workbook")
-    database = await prepared(tmp_path, "a.xlsx", ())
+    storage.save("u/1/folder/a.xlsx", b"not a workbook")
+    database = await prepared(tmp_path, "a.xlsx")
     try:
-        await Ingesting(Workbench(storage, tmp_path / "home"), database, Shelf(), Recording()).run(
+        await Ingesting(Workbench(storage, tmp_path / "home"), database, Recording()).run(
             snapshot()
         )
     finally:
@@ -200,139 +185,38 @@ def test_fails_loudly_on_a_file_that_is_not_a_declaration(tmp_path: Path) -> Non
     )
 
 
-async def bound(
-    tmp_path: Path,
-    policies: tuple[tuple[str, str], ...],
-    text: str,
-    ignore: str = '["№"]',
-) -> tuple[Declaration, list[str]]:
-    database = await prepared(tmp_path, "a.xlsx", policies)
-    shelf: Shelf[str] = Shelf()
-    shelf.put(text)
+async def bound(tmp_path: Path, *, with_policy: bool) -> tuple[Declaration, list[str]]:
+    database = await prepared(tmp_path, "a.xlsx", with_policy=with_policy)
     journal = Recording()
-    await Binding(
-        Matching(database, Numbering(cards(tmp_path, ignore))), database, shelf, journal
-    ).run(snapshot())
-    found = await row(database)
-    await database.close()
+    try:
+        await Binding(database, journal).run(snapshot())
+        found = await row(database)
+    finally:
+        await database.close()
     return found, journal.lines
 
 
-def run_bind(
-    tmp_path: Path,
-    policies: tuple[tuple[str, str], ...],
-    text: str,
-    ignore: str = '["№"]',
-) -> tuple[Declaration, list[str]]:
-    return asyncio.run(asyncio.wait_for(bound(tmp_path, policies, text, ignore), 60))
-
-
-def test_binds_the_declaration_to_the_only_policy_of_its_group_with_the_number(
-    tmp_path: Path,
-) -> None:
-    number = word()
-    found, _ = run_bind(tmp_path, (("№ " + number, "g"), (word(), "g")), number)
+def test_binds_the_declaration_to_the_policy_of_its_session(tmp_path: Path) -> None:
+    found, _ = asyncio.run(asyncio.wait_for(bound(tmp_path, with_policy=True), 60))
     assert_that(
         (found.policy_id, found.binding),
         equal_to((1, "bound")),
-        "Binding does not link the declaration to the only policy with the number",
+        "Binding does not link the declaration to the policy of its session",
     )
 
 
-def test_binds_a_number_written_with_the_ignored_character_of_the_card(tmp_path: Path) -> None:
-    number = word()
-    found, _ = run_bind(tmp_path, ((f"#{number}", "g"),), number, '["#"]')
+def test_fails_loudly_when_the_session_has_no_policy(tmp_path: Path) -> None:
     assert_that(
-        (found.policy_id, found.binding),
-        equal_to((1, "bound")),
-        "Binding does not take the ignored characters from the card",
+        lambda: asyncio.run(asyncio.wait_for(bound(tmp_path, with_policy=False), 60)),
+        raises(LookupError),
+        "Binding does not fail when the session has no policy",
     )
 
 
-def test_does_not_ignore_a_character_that_the_card_does_not_list(tmp_path: Path) -> None:
-    number = word()
-    found, _ = run_bind(tmp_path, ((f"№{number}", "g"),), number, '["#"]')
+def test_writes_the_binding_to_the_journal_with_job_and_declaration(tmp_path: Path) -> None:
+    _, lines = asyncio.run(asyncio.wait_for(bound(tmp_path, with_policy=True), 60))
     assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_unknown")),
-        "Binding ignores a character that the card does not list",
-    )
-
-
-def test_binds_a_number_that_is_written_with_spaces(tmp_path: Path) -> None:
-    found, _ = run_bind(tmp_path, (("77 AB 5", "g"),), "77AB5")
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((1, "bound")),
-        "Binding does not ignore spaces inside the number",
-    )
-
-
-def test_goes_on_without_policy_when_no_policy_has_the_number(tmp_path: Path) -> None:
-    found, _ = run_bind(tmp_path, ((word(), "g"),), word())
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_unknown")),
-        "Binding does not leave the declaration without a policy when none has the number",
-    )
-
-
-def test_goes_on_without_policy_when_two_policies_have_the_number(tmp_path: Path) -> None:
-    number = word()
-    found, _ = run_bind(tmp_path, ((number, "g"), (f"№ {number}", "g")), number)
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_ambiguous")),
-        "Binding does not leave the declaration without a policy when two have the number",
-    )
-
-
-def test_does_not_look_for_the_policy_in_another_group(tmp_path: Path) -> None:
-    number = word()
-    found, _ = run_bind(tmp_path, ((number, "other"),), number)
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_unknown")),
-        "Binding does not keep the declaration apart from a policy of another group",
-    )
-
-
-def test_names_a_declaration_without_policy_number_apart(tmp_path: Path) -> None:
-    found, _ = run_bind(tmp_path, ((word(), "g"),), "")
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_missing")),
-        "Binding does not name a declaration without a policy number apart",
-    )
-
-
-def test_names_a_policy_number_with_nothing_but_ignored_characters_apart(tmp_path: Path) -> None:
-    found, _ = run_bind(tmp_path, ((word(), "g"),), "№ №")
-    assert_that(
-        (found.policy_id, found.binding),
-        equal_to((None, "policy_unreadable")),
-        "Binding does not name an unreadable policy number apart",
-    )
-
-
-def test_writes_the_code_to_the_journal_without_the_number(tmp_path: Path) -> None:
-    number = word()
-    _, lines = run_bind(tmp_path, ((word(), "g"),), number)
-    assert_that(
-        (
-            any("policy_unknown" in line and "declaration_id=1" in line for line in lines),
-            any(number in line for line in lines),
-        ),
-        equal_to((True, False)),
-        "Journal does not hold the code of the reason or holds the number of the policy",
-    )
-
-
-def test_writes_the_policy_to_the_journal_when_bound(tmp_path: Path) -> None:
-    number = word()
-    _, lines = run_bind(tmp_path, ((number, "g"),), number)
-    assert_that(
-        any("policy_" in line for line in lines),
-        equal_to(False),
-        "Journal does not stay free of reasons although the declaration is bound",
+        any("job_id=5" in line and "declaration_id=1" in line for line in lines),
+        equal_to(True),
+        "Journal does not name the job and the declaration of the binding",
     )

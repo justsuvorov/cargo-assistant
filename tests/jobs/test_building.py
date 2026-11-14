@@ -17,7 +17,7 @@ from app.jobs.building import Workbench
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
-from app.jobs.models import Base, PolicyDocument
+from app.jobs.models import Base, Policy, PolicyDocument
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.jobs.stages import Building
@@ -26,7 +26,6 @@ from app.llm.fake import FakeModel
 from app.llm.model import Model
 from app.storage.archive import Blob, Unzipped
 from app.storage.disk import DiskStorage
-from app.storage.layout import Keys
 from app.storage.tree import Tree
 
 
@@ -99,12 +98,19 @@ async def build(tmp_path: Path, files: tuple[Blob, ...], model: Model) -> tuple[
         await session.commit()
     queue = Queue(database, Utc())
     storage = DiskStorage(tmp_path / "files")
-    shelving = Shelving(database, queue, storage, Keys())
-    registered = await shelving.receive(Tree(files).files(), "g")
+    shelving = Shelving(database, queue)
+    for file in Tree(files).files():
+        storage.save(f"u/1/folder/{file.name()}", file.data())
+    async with database.session() as session:
+        policy = Policy(owner="u", package_sha="s", package_key="u/1/folder")
+        session.add(policy)
+        await session.flush()
+        policy.job_id = await queue.add(session, "profile_build", {"policy_id": policy.id})
+        await session.commit()
     (tmp_path / ".env").write_text("WORKER_JOB_TIMEOUT=60\n", encoding="utf-8")
     pipelines = Building(
         Workbench(storage, tmp_path / "soffice"),
-        Folios(database, queue, Utc()),
+        Folios(database, Utc()),
         shelving,
         Given(model, []),
         Silent(),
@@ -112,7 +118,7 @@ async def build(tmp_path: Path, files: tuple[Blob, ...], model: Model) -> tuple[
     await Shift(
         queue, pipelines, EnvSettings(Environment(str(tmp_path / ".env"))), Silent(), Blank()
     ).drain()
-    return database, registered.policy_id, registered.job_id
+    return database, policy.id, policy.job_id or 0
 
 
 async def saves_draft_with_requisites_from_the_model(tmp_path: Path) -> tuple[str, date, str]:
@@ -124,7 +130,7 @@ async def saves_draft_with_requisites_from_the_model(tmp_path: Path) -> tuple[st
         "profile.amendment.1": json.dumps({"passages": []}),
     }
     database, policy, job = await build(tmp_path, package(number), FakeModel(answers))
-    profile = (await Folios(database, Queue(database, Utc()), Utc()).latest(policy)).profile
+    profile = (await Folios(database, Utc()).latest(policy)).profile
     snapshot = await Queue(database, Utc()).snapshot(job)
     await database.close()
     return (profile.number == number and "x") or "", profile.issued, snapshot.status

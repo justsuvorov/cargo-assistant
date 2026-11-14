@@ -38,3 +38,19 @@ def test_refuses_path_leading_out_of_the_folder() -> None:
         raises(EscapeError),
         "Tree does not refuse a path leading out",
     )
+
+
+def test_names_the_wrapping_folder() -> None:
+    assert_that(
+        Tree((Blob("Пакет/ГП.doc", b"1"), Blob("Пакет/ДС/ДС 1.doc", b"2"))).name(),
+        equal_to("Пакет"),
+        "Tree does not name the wrapping folder",
+    )
+
+
+def test_gives_blank_name_when_there_is_no_wrapping_folder() -> None:
+    assert_that(
+        Tree((Blob("ГП.doc", b"1"), Blob("ДС/ДС 1.doc", b"2"))).name(),
+        equal_to(""),
+        "Tree names a folder that does not wrap the files",
+    )
