@@ -126,7 +126,7 @@ class Conditioning:
             row.conditions = listed.table()
             row.conditions_problems = list(listed.problems())
             await session.commit()
-        # @todo #45:60min Подключить найденные условия к accepted.<поле> карточек после решения П-35; статусы полей они пока не меняют
+        # @todo #45:60min Подключить условия к accepted.<поле> после решения П-35
         found.put(listed)
         self._journal.info(
             f"Особые условия найдены за {spent:.3f} с: условий {len(listed.rows())}, "
