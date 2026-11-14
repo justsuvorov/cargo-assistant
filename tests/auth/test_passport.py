@@ -48,14 +48,13 @@ def test_accepts_token_signed_by_known_key(tmp_path: Path) -> None:
                 "iss": f"http://kc.local/realms/{realm}",
                 "preferred_username": "ivanov",
                 "realm_access": {"roles": ["cargo_expert"]},
-                "groups": ["/fsc"],
             },
         )
     )
     assert_that(
-        (identity.name(), identity.allows("expert"), identity.sees("fsc")),
-        equal_to(("ivanov", True, True)),
-        "Verified token does not give the name, roles and groups",
+        (identity.name(), identity.allows("expert")),
+        equal_to(("ivanov", True)),
+        "Verified token does not give the name and roles",
     )
 
 
@@ -72,19 +71,6 @@ def test_lets_expert_do_what_user_does(tmp_path: Path) -> None:
         identity.allows("user"),
         equal_to(True),
         "Expert is not allowed what a user is allowed",
-    )
-
-
-def test_hides_other_groups_from_person(tmp_path: Path) -> None:
-    realm = f"r{random.randint(1, 999)}"
-    private, keys = pair()
-    identity = Keycloak(settings(tmp_path, realm), keys).identity(
-        token(private, {"iss": f"http://kc.local/realms/{realm}", "groups": ["/fsc"]})
-    )
-    assert_that(
-        identity.sees("other"),
-        equal_to(False),
-        "Person sees a group that they do not belong to",
     )
 
 
@@ -168,8 +154,8 @@ def test_refuses_token_without_sub(tmp_path: Path) -> None:
 def test_open_passport_allows_everything_without_token() -> None:
     identity = Open("dev-user").identity("")
     assert_that(
-        (identity.allows("admin"), identity.sees("any"), identity.group()),
-        equal_to((True, True, "dev")),
+        identity.allows("admin"),
+        equal_to(True),
         "Development passport does not allow everything",
     )
 

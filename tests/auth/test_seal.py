@@ -70,12 +70,12 @@ def test_refuses_empty_secret() -> None:
 def test_builds_person_from_session_card() -> None:
     signer = Signed(secret(), Moment())
     who = Sealed(signer).identity(
-        signer.seal(Person("u7", "ivanov", frozenset({"user"}), frozenset({"fsc"})).card(), 60)
+        signer.seal(Person("u7", "ivanov", frozenset({"user"})).card(), 60)
     )
     assert_that(
-        (who.id(), who.name(), who.allows("user"), who.sees("fsc")),
-        equal_to(("u7", "ivanov", True, True)),
-        "Session does not give id, name, roles and groups back",
+        (who.id(), who.name(), who.allows("user")),
+        equal_to(("u7", "ivanov", True)),
+        "Session does not give id, name and roles back",
     )
 
 

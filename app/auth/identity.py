@@ -1,10 +1,8 @@
 from typing import Final, Protocol, final
 
-from app.auth.errors import DeniedError
-
 
 class Identity(Protocol):
-    """Person who sends requests, with the roles and groups that define what they may do."""
+    """Person who sends requests, with the roles that define what they may do."""
 
     def id(self) -> str: ...
 
@@ -12,26 +10,19 @@ class Identity(Protocol):
 
     def allows(self, role: str) -> bool: ...
 
-    def sees(self, group: str) -> bool: ...
-
-    def group(self) -> str: ...
-
     def card(self) -> dict[str, str]: ...
 
 
 @final
 class Person:
-    """Identity with roles and groups; the group star stands for every group."""
+    """Identity with a name and the roles that define what a person may do."""
 
-    __slots__ = ("_groups", "_id", "_name", "_roles")
+    __slots__ = ("_id", "_name", "_roles")
 
-    def __init__(
-        self, ident: str, name: str, roles: frozenset[str], groups: frozenset[str]
-    ) -> None:
+    def __init__(self, ident: str, name: str, roles: frozenset[str]) -> None:
         self._id: Final = ident
         self._name: Final = name
         self._roles: Final = roles
-        self._groups: Final = groups
 
     def id(self) -> str:
         return self._id
@@ -42,21 +33,11 @@ class Person:
     def allows(self, role: str) -> bool:
         return role in self._roles
 
-    def sees(self, group: str) -> bool:
-        return group in self._groups or "*" in self._groups
-
-    def group(self) -> str:
-        owned = sorted(self._groups - {"*"})
-        if not owned:
-            raise DeniedError(f"У пользователя {self._name} нет группы доступа")
-        return owned[0]
-
     def card(self) -> dict[str, str]:
         return {
             "sub": self._id,
             "name": self._name,
             "roles": ",".join(sorted(self._roles)),
-            "groups": ",".join(sorted(self._groups)),
         }
 
 
@@ -72,7 +53,6 @@ class Local:
             user,
             "Локальный пользователь",
             frozenset({"user", "expert", "admin"}),
-            frozenset({"*", "dev"}),
         )
 
     def id(self) -> str:
@@ -83,12 +63,6 @@ class Local:
 
     def allows(self, role: str) -> bool:
         return self._person.allows(role)
-
-    def sees(self, group: str) -> bool:
-        return self._person.sees(group)
-
-    def group(self) -> str:
-        return self._person.group()
 
     def card(self) -> dict[str, str]:
         return {**self._person.card(), "sub": self._id}

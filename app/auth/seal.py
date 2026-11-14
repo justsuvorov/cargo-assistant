@@ -75,5 +75,4 @@ class Sealed:
             sub,
             record.get("name", sub),
             frozenset(item for item in record.get("roles", "").split(",") if item),
-            frozenset(item for item in record.get("groups", "").split(",") if item),
         )
