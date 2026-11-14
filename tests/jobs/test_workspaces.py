@@ -25,6 +25,22 @@ _FIRST = "Декларации/Июнь/508.xls"
 _SECOND = "Декларации/Июнь/511.xlsx"
 
 
+class Recording:
+    """Test double named recording."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def info(self, message: str, job_id: int, declaration_id: int) -> None:
+        self.lines.append(f"{message}, job_id={job_id}, declaration_id={declaration_id}")
+
+    def warning(self, message: str, job_id: int, declaration_id: int) -> None:
+        self.lines.append(message)
+
+    def error(self, message: str, job_id: int, declaration_id: int) -> None:
+        self.lines.append(message)
+
+
 def word() -> str:
     return "".join(random.choices(string.ascii_lowercase, k=8))
 
@@ -49,7 +65,7 @@ async def prepare(path: Path) -> tuple[Database, Filing]:
         database,
         Queue(database, Utc()),
         (storage, Keys(), Workbench(storage, path / "home")),
-        Utc(),
+        (Utc(), Recording()),
     )
     return database, filing
 
@@ -239,7 +255,7 @@ async def starts_at_once_on_postgres(tmp_path: Path) -> tuple[int, int, int]:
             database,
             Queue(database, Utc()),
             (storage, Keys(), Workbench(storage, tmp_path / "home")),
-            Utc(),
+            (Utc(), Recording()),
         )
         owner = word()
         first = await filing.open(owner, "A", "Пример", folder())
@@ -268,4 +284,34 @@ def test_gives_two_sessions_started_at_once_one_policy_and_one_build_on_postgres
         asyncio.run(asyncio.wait_for(starts_at_once_on_postgres(tmp_path), 120)),
         equal_to((1, 1, 2)),
         "Two sessions started at once do not share one policy and one build of its profile",
+    )
+
+
+async def journals_start(tmp_path: Path) -> tuple[list[str], int]:
+    database = Database(f"sqlite+aiosqlite:///{tmp_path / 'j.db'}")
+    async with database.session() as session:
+        connection = await session.connection()
+        await connection.run_sync(Base.metadata.create_all)
+        await session.commit()
+    storage = DiskStorage(tmp_path / "files")
+    journal = Recording()
+    filing = Filing(
+        database,
+        Queue(database, Utc()),
+        (storage, Keys(), Workbench(storage, tmp_path / "home")),
+        (Utc(), journal),
+    )
+    owner = word()
+    number = await filing.open(owner, "Иванов", "Пример", folder())
+    await filing.start(owner, number, (_FIRST, _SECOND))
+    await database.close()
+    return journal.lines, number
+
+
+def test_journals_the_start_of_the_session_with_its_number_and_count(tmp_path: Path) -> None:
+    lines, number = asyncio.run(asyncio.wait_for(journals_start(tmp_path), 60))
+    assert_that(
+        f"Сессия {number}: запущено 2 деклараций, job_id=0, declaration_id=0" in lines,
+        equal_to(True),
+        "Start does not write the number of the session and the count of declarations",
     )
