@@ -4,11 +4,10 @@
 <h1>Сессия {{ workspace.id }}: {{ workspace.name }}</h1>
 <p>Открыта {{ workspace.created_at }}{% if workspace.owner_name %}, {{ workspace.owner_name }}{% endif %}.
   {% if view.started() %}Запущена {{ workspace.started_at }}.{% endif %}</p>
-{% set client = workspace.client_conditions or {} %}
 <p id="client-conditions">Особые условия клиента:
-  {% if client.get("file") %}{{ client["file"] }}{% if client.get("chosen") %} (выбран отдельно от папки){% else %} (из папки полиса){% endif %}
+  {% if workspace.client_file %}{{ workspace.client_file }}{% if workspace.client_chosen %} (выбран отдельно от папки){% else %} (из папки полиса){% endif %}
   {% else %}файл не задан{% endif %}.</p>
-{% for problem in client.get("problems", []) %}<div class="alert problems" role="alert">{{ problem }}</div>{% endfor %}
+{% for problem in workspace.client_problems %}<div class="alert problems" role="alert">{{ problem }}</div>{% endfor %}
 {% if notice %}<div class="alert error" role="alert">{{ notice }}</div>{% endif %}
 
 {% if view.started() %}

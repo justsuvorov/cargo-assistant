@@ -69,3 +69,21 @@ def test_places_knowledge_source_under_ruleset() -> None:
         equal_to(f"knowledge/{ruleset}/source/base.docx"),
         "Knowledge key does not follow the layout",
     )
+
+
+def test_places_the_chosen_conditions_file_of_a_session_under_the_owner() -> None:
+    owner = uuid.uuid4().hex
+    session = random.randint(1, 999)
+    assert_that(
+        Keys().chosen(owner, session, "условия.docx"),
+        equal_to(f"{owner}/{session}/conditions/условия.docx"),
+        "Key of the chosen conditions file does not lie under the owner and the session",
+    )
+
+
+def test_refuses_chosen_conditions_file_with_a_path() -> None:
+    assert_that(
+        lambda: Keys().chosen("o", 1, "../x.docx"),
+        raises(EscapeError),
+        "Keys does not refuse a name of the chosen conditions file with a path",
+    )
