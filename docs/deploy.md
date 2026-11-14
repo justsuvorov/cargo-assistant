@@ -89,7 +89,7 @@ curl -i http://localhost:8080/health
 
 ## Переменные окружения
 
-Секреты (`cargo-secret`): `DATABASE_URL`, `LLM_API_KEY`. Остальное — ConfigMap `cargo-config`.
+Секреты (`cargo-secret`): `DATABASE_URL`, `LLM_API_KEY`, `SESSION_SECRET`, `KEYCLOAK_CLIENT_SECRET` (последние два нужны при включённом входе). Остальное — ConfigMap `cargo-config`.
 
 | Переменная | Назначение | По умолчанию |
 |---|---|---|
@@ -97,6 +97,12 @@ curl -i http://localhost:8080/health
 | `STORAGE_DIR` | каталог общего хранилища, смонтированный PVC | `/data/storage` |
 | `AUTH_DISABLED` | `true` — вход без Keycloak, пометка на страницах и предупреждение в логе | `false` |
 | `AUTH_DEV_USER_ID` | идентификатор единственного пользователя при `AUTH_DISABLED=true`; имя — «Локальный пользователь» | `dev-user` |
+| `KEYCLOAK_URL`, `KEYCLOAK_REALM`, `KEYCLOAK_CLIENT_ID` | адрес Keycloak, реалм и клиент (authorization code flow с PKCE); redirect URI клиента — `<адрес сервиса>/auth/callback` | — |
+| `KEYCLOAK_CLIENT_SECRET` | секрет клиента, если он конфиденциальный (секрет) | пусто |
+| `SESSION_SECRET` | ключ подписи cookie сессии; без него при `AUTH_DISABLED=false` сервис не стартует (секрет, одинаков во всех подах api) | — |
+| `SESSION_SECURE` | cookie только по HTTPS; `false` — лишь для http без TLS | `true` |
+| `SESSION_HOURS` | срок сессии в часах; по истечении снова вход | `12` |
+| `APP_BASE_URL` | внешний адрес для redirect_uri, если за прокси схема или хост определяются неверно | пусто |
 | `FORWARDED_ALLOW_IPS` | адреса, которым uvicorn верит в `X-Forwarded-*` (адрес ingress или `*`) | `127.0.0.1` |
 | `LLM_PROVIDER` | `vsk` — шлюз ВСК | `vsk` |
 | `LLM_API_URL`, `LLM_MODEL` | адрес и модель шлюза | — |
@@ -148,3 +154,15 @@ kubectl -n cargo-assistant create configmap cargo-ca --from-file=ca.pem=./ca.pem
   запустить заново.
 - Образ не подписан, секрет доступа к реестру (`imagePullSecrets`) в манифестах не описан:
   добавьте его, если реестр требует вход.
+
+## Вход через Keycloak
+
+При `AUTH_DISABLED=false` страницы требуют вход: `/auth/login` отправляет в Keycloak
+(authorization code flow, PKCE S256), `/auth/callback` проверяет `state`, меняет код на токен,
+проверяет подпись токена и кладёт в cookie `cargo_session` подписанную `SESSION_SECRET` запись
+(`sub`, `preferred_username`, роли, группы; токен Keycloak в cookie не хранится). `/auth/logout`
+стирает cookie и завершает сессию в Keycloak. Истёкшая или поддельная сессия — перенаправление
+на вход; запросы `/api/*` без токена получают 401, с заголовком `Authorization: Bearer` проверяются
+как раньше. Токен без `sub` отклоняется. В клиенте Keycloak включите стандартный поток, PKCE S256
+и redirect URI `<адрес>/auth/callback`; `aud` токена должен содержать `KEYCLOAK_CLIENT_ID`.
+Создать ключ: `python -c "import secrets; print(secrets.token_urlsafe(48))"`.

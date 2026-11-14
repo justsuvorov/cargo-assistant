@@ -6,7 +6,9 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from app.auth.exchange import Remote
 from app.auth.passport import Keycloak, Open, Passport, RemoteKeys
+from app.auth.seal import Sealed, Signed
 from app.core.clock import Utc
 from app.core.journal import Sink
 from app.core.schema.environment import Environment
@@ -18,7 +20,7 @@ from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.storage.disk import DiskStorage
 from app.storage.layout import Keys
-from app.web import api, pages, policies, results
+from app.web import api, login, pages, policies, results
 from app.web.services import Services
 
 
@@ -28,6 +30,10 @@ def passport(settings: Settings) -> Passport:
         if settings.development()
         else Keycloak(settings, RemoteKeys(settings.certs()))
     )
+
+
+def session(settings: Settings, seal: Signed) -> Passport:
+    return Open(settings.user()) if settings.development() else Sealed(seal)
 
 
 def announce(settings: Settings, sink: Sink) -> None:
@@ -45,6 +51,7 @@ async def lifespan(application: FastAPI) -> AsyncIterator[None]:
 def create_app(settings: Settings) -> FastAPI:
     database = Database(settings.database())
     queue = Queue(database, Utc())
+    seal = Signed(settings.secret() or ("development" if settings.development() else ""), Utc())
     application = FastAPI(title="cargo-assistant", lifespan=lifespan)
     storage = DiskStorage(settings.storage())
     application.state.services = Services(
@@ -55,11 +62,15 @@ def create_app(settings: Settings) -> FastAPI:
         Shelving(database, queue, storage, Keys()),
         Folios(database, queue, Utc()),
         passport(settings),
+        session(settings, seal),
+        seal,
+        Remote(settings),
         storage,
     )
     application.mount(
         "/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static"
     )
+    application.include_router(login.router)
     application.include_router(policies.router)
     application.include_router(pages.router)
     application.include_router(results.router)

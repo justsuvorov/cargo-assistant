@@ -161,4 +161,4 @@ class Foreign:
     """Passport of a person from a group that owns nothing."""
 
     def identity(self, token: str) -> Identity:
-        return Person("x" + token, frozenset({"user"}), frozenset({"other"}))
+        return Person("x", "x" + token, frozenset({"user"}), frozenset({"other"}))
