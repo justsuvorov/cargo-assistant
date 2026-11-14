@@ -182,7 +182,7 @@ def test_judges_semantic_questions_on_the_model_gateway_with_the_version_of_the_
     )[0]
     assert_that(
         (judge.version(), verdict.status().key(), verdict.reason().source()),
-        equal_to(("semantic-1", "mismatch", "llm")),
+        equal_to(("semantic-2", "mismatch", "llm")),
         "Benches does not judge on the model gateway with the version of the prompt",
     )
 

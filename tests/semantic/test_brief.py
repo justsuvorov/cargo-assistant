@@ -63,6 +63,42 @@ def test_same_clause_and_rule_is_listed_once() -> None:
 def test_names_its_prompt_version() -> None:
     assert_that(
         {"version": Brief().version()},
-        has_entries(version="semantic-1"),
+        has_entries(version="semantic-2"),
         "Brief does not name the version of its prompt",
+    )
+
+
+def test_puts_special_conditions_with_their_source_into_the_prompt() -> None:
+    note = uuid.uuid4().hex
+    messages = Brief((note,)).messages(
+        (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы"), "правило"),)
+    )
+    assert_that(
+        (json.loads(messages[-1].text())["особые_условия"], "особые_условия" in messages[0].text()),
+        equal_to(([note], True)),
+        "Brief does not give the special conditions to the model as text with the instruction",
+    )
+
+
+def test_leaves_the_prompt_as_it_was_without_special_conditions() -> None:
+    messages = Brief().messages(
+        (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы"), "правило"),)
+    )
+    assert_that(
+        ("особые_условия" in messages[-1].text(), "особые_условия" in messages[0].text()),
+        equal_to((False, False)),
+        "Brief changes the prompt of a declaration that has no special conditions",
+    )
+
+
+def test_cuts_the_number_and_the_length_of_the_notes() -> None:
+    notes = tuple("я" * 5000 for _ in range(80))
+    messages = Brief(notes).messages(
+        (Inquiry(Spot("1", "cargo"), "мех", Text("ГП п. 5", "грузы"), "правило"),)
+    )
+    listed = json.loads(messages[-1].text())["особые_условия"]
+    assert_that(
+        (len(listed), len(listed[0])),
+        equal_to((50, 1000)),
+        "Brief does not cut the notes to a fixed number and length",
     )

@@ -6,6 +6,8 @@
      особые условия клиента — в папке «Особые условия», декларации — в любых других подпапках, например «Декларации/Июнь».</p>
   <p><label>Папка целиком: <input type="file" name="files" webkitdirectory multiple></label></p>
   <p><label>или архив zip: <input type="file" name="files" accept=".zip"></label></p>
+  <p><label>Файл особых условий клиента (необязательно): <input type="file" name="conditions"></label><br>
+     Если в папке уже есть папка «Особые условия», выбранный здесь файл берётся вместо неё.</p>
   <button type="submit">Открыть папку</button>
 </form>
 {% endblock %}

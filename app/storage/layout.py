@@ -12,6 +12,10 @@ class Layout(Protocol):
 
     def entry(self, owner: str, session: int, path: str) -> str: ...
 
+    def special(self, owner: str, session: int) -> str: ...
+
+    def chosen(self, owner: str, session: int, name: str) -> str: ...
+
     def result(self, owner: str, session: int, declaration_id: int, number: str) -> str: ...
 
     def knowledge(self, ruleset_id: int, name: str) -> str: ...
@@ -28,6 +32,12 @@ class Keys:
 
     def entry(self, owner: str, session: int, path: str) -> str:
         return f"{self.folder(owner, session)}/{Relative(path).path()}"
+
+    def special(self, owner: str, session: int) -> str:
+        return f"{self._name(owner)}/{session}/conditions"
+
+    def chosen(self, owner: str, session: int, name: str) -> str:
+        return f"{self.special(owner, session)}/{self._name(name)}"
 
     def result(self, owner: str, session: int, declaration_id: int, number: str) -> str:
         return (

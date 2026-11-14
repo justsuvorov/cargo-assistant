@@ -1,5 +1,5 @@
 import json
-from typing import Protocol, final
+from typing import Final, Protocol, final
 
 from app.domain.semantics import Question
 from app.llm.messages import Message, System, User
@@ -25,6 +25,14 @@ id, status (match, mismatch или review) и comment — короткий ко�
 русском языке, не длиннее 200 символов. Для mismatch и review назови в комментарии ту часть
 значения, которая определила статус."""
 
+_CONDITIONS = """
+
+В JSON может быть ещё список «особые_условия» — особые условия этого полиса с пометкой
+источника и приоритета. Условие с приоритетом «выше» перевешивает общее при противоречии. Учитывай
+их при решении так же, как текст пункта; не придумывай из них новых проверок дат, сумм и номеров."""
+_NOTES = 50
+_LENGTH = 1000
+
 
 class Prompt(Protocol):
     """Conversation that puts the questions of one card before the model, and its version."""
@@ -42,14 +50,21 @@ def _point(question: Question) -> tuple[str, str, str]:
 class Brief:
     """Prompt that lists each clause with the rule of its card once and numbers the values;
     only the value, the clause and the rule reach the model, no other field of the
-    declaration and nothing about the policy holder."""
+    declaration and nothing about the policy holder.
 
-    __slots__ = ()
+    The given special conditions of the policy, each with its source and priority, follow as
+    text; there are at most a fixed number of them, each cut to a fixed length.
+    """
+
+    __slots__ = ("_notes",)
+
+    def __init__(self, notes: tuple[str, ...] = ()) -> None:
+        self._notes: Final = notes
 
     def messages(self, questions: tuple[Question, ...]) -> tuple[Message, ...]:
         points = tuple(dict.fromkeys(_point(question) for question in questions))
         return (
-            System(_INSTRUCTION),
+            System(_INSTRUCTION + (_CONDITIONS if self._notes else "")),
             User(
                 json.dumps(
                     {
@@ -62,6 +77,11 @@ class Brief:
                             }
                             for index, point in enumerate(points, start=1)
                         ],
+                        **(
+                            {"особые_условия": [note[:_LENGTH] for note in self._notes[:_NOTES]]}
+                            if self._notes
+                            else {}
+                        ),
                         "значения": [
                             {
                                 "id": index,
@@ -78,4 +98,4 @@ class Brief:
         )
 
     def version(self) -> str:
-        return "semantic-1"
+        return "semantic-2"

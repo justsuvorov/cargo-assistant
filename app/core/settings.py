@@ -13,6 +13,8 @@ class Settings(Protocol):
 
     def soffice(self) -> Path: ...
 
+    def conditions(self) -> Path: ...
+
     def cache_days(self) -> int: ...
 
     def jobs(self) -> int: ...
@@ -85,6 +87,9 @@ class EnvSettings:
 
     def soffice(self) -> Path:
         return Path(self._environment.soffice_dir or self.storage() / "soffice")
+
+    def conditions(self) -> Path:
+        return Path(self._environment.special_conditions_path)
 
     def cache_days(self) -> int:
         return self._environment.soffice_cache_days

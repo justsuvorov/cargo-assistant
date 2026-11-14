@@ -3,7 +3,7 @@ import hashlib
 import shutil
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Final, Protocol, final
+from typing import Any, Final, Protocol, final
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import Clock
 from app.jobs.building import Bench
+from app.jobs.clients import Clients
 from app.jobs.database import Sessions
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
 from app.jobs.inventory import Inventory
@@ -29,12 +30,20 @@ class Surveyed:
 
     declarations: tuple[str, ...]
     signature: str
+    conditions: dict[str, Any]
 
 
 class Workspaces(Protocol):
     """Sessions of users: the folder a user opens and the declarations the user starts."""
 
-    async def open(self, owner: str, who: str, name: str, files: tuple[Stored, ...]) -> int: ...
+    async def open(
+        self,
+        owner: str,
+        who: str,
+        name: str,
+        files: tuple[Stored, ...],
+        special: tuple[Stored, ...] = (),
+    ) -> int: ...
 
     async def start(
         self, owner: str, workspace_id: int, chosen: tuple[str, ...]
@@ -66,7 +75,14 @@ class Filing:
         self._parts: Final = parts
         self._clock: Final = clock
 
-    async def open(self, owner: str, who: str, name: str, files: tuple[Stored, ...]) -> int:
+    async def open(
+        self,
+        owner: str,
+        who: str,
+        name: str,
+        files: tuple[Stored, ...],
+        special: tuple[Stored, ...] = (),
+    ) -> int:
         storage, layout, _ = self._parts
         keys: list[str] = []
         async with self._sessions.session() as session:
@@ -85,9 +101,16 @@ class Filing:
                     key = layout.entry(owner, row.id, file.name())
                     storage.save(key, file.data())
                     keys.append(key)
-                surveyed = await asyncio.to_thread(self._survey, layout.folder(owner, row.id))
+                for file in special:
+                    key = layout.chosen(owner, row.id, file.name())
+                    storage.save(key, file.data())
+                    keys.append(key)
+                surveyed = await asyncio.to_thread(
+                    self._survey, layout.folder(owner, row.id), layout.special(owner, row.id)
+                )
                 row.found = list(surveyed.declarations)
                 row.package_sha = surveyed.signature
+                row.client_conditions = surveyed.conditions
                 await session.commit()
             except Exception:
                 for key in keys:
@@ -124,13 +147,19 @@ class Filing:
         if missing:
             raise ChoiceError(f"В папке нет декларации {missing[0]}")
 
-    def _survey(self, prefix: str) -> Surveyed:
+    def _survey(self, prefix: str, chosen: str) -> Surveyed:
         folder = self._parts[2].unpack(prefix)
+        own = self._parts[2].unpack(chosen)
         try:
             inventory = Inventory(folder)
-            return Surveyed(inventory.declarations(), inventory.signature())
+            return Surveyed(
+                inventory.declarations(),
+                inventory.signature(),
+                Clients(folder, own).record(),
+            )
         finally:
             shutil.rmtree(folder, ignore_errors=True)
+            shutil.rmtree(own, ignore_errors=True)
 
     async def _policy(self, session: AsyncSession, row: Workspace) -> Policy:
         query = select(Policy).where(
