@@ -1,13 +1,15 @@
 import asyncio
+import io
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
+from docx import Document
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-from hamcrest import assert_that, equal_to
+from hamcrest import assert_that, contains_string, equal_to
 from openpyxl import Workbook
 
 from app.auth.identity import Identity, Person
@@ -19,10 +21,13 @@ from app.jobs.checking import Postponing
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
+from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
-from app.jobs.stages import Kit, Standard
+from app.jobs.stages import Building, Kit, Routed, Standard
 from app.jobs.versions import Stamp
 from app.jobs.worker import Shift
+from app.llm.errors import MisconfiguredError
+from app.llm.model import Model
 from app.storage.disk import DiskStorage
 from app.web.application import create_app
 
@@ -53,7 +58,7 @@ def settings(folder: Path, extra: str = "AUTH_DEV_MODE=true") -> EnvSettings:
     return EnvSettings(Environment(str(folder / ".env")))
 
 
-def declaration(folder: Path) -> bytes:
+def declaration() -> bytes:
     book = Workbook()
     sheet = book.create_sheet("Декларация")
     for row, cells in (
@@ -69,8 +74,24 @@ def declaration(folder: Path) -> bytes:
     ):
         for column, value in cells.items():
             sheet.cell(row=row, column=column + 1, value=value)
-    book.save(folder / "d.xlsx")
-    return (folder / "d.xlsx").read_bytes()
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def policy() -> bytes:
+    document = Document()
+    document.add_paragraph("Генеральный полис страхования грузов № 0000T00GR0000")
+    buffer = io.BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+class Unreachable:
+    """Test double named unreachable: a process whose model gateway is not configured."""
+
+    def model(self, job_id: int) -> Model:
+        raise MisconfiguredError(f"Для задачи {job_id} не настроен шлюз модели")
 
 
 async def work(config: EnvSettings) -> int:
@@ -84,7 +105,11 @@ async def work(config: EnvSettings) -> int:
         Postponing(),
         ThreadPoolExecutor(2),
     )
-    pipelines = Standard(Silent(), Folios(database, Utc()), database, bench, kit)
+    folio = Folios(database, Utc())
+    pipelines = Routed(
+        Standard(Silent(), folio, database, bench, kit),
+        Building(bench, folio, Shelving(database, queue), Unreachable(), Silent()),
+    )
     count = await Shift(queue, pipelines, config, Silent(), Blank()).drain()
     await database.close()
     return count
@@ -94,7 +119,14 @@ def run_all(folder: Path) -> FastAPI:
     config = settings(folder)
     application = create_app(config)
     with TestClient(application) as client:
-        client.post("/api/declarations", files=[("files", ("a.xlsx", declaration(folder)))])
+        client.post(
+            "/sessions",
+            files=[
+                ("files", ("Пример/ГП.docx", policy())),
+                ("files", ("Пример/Декларации/a.xlsx", declaration())),
+            ],
+        )
+        client.post("/sessions/1/start", data={"declaration": ["Декларации/a.xlsx"]})
         asyncio.run(asyncio.wait_for(work(config), 60))
     return application
 
@@ -136,29 +168,41 @@ def test_downloads_result_workbook(tmp_path: Path) -> None:
     )
 
 
-def test_hides_result_of_another_group_as_not_found(tmp_path: Path) -> None:
+def test_hides_result_of_another_user_as_not_found(tmp_path: Path) -> None:
     application = run_all(tmp_path)
     application.state.services = replace(application.state.services, passport=Foreign())
     with TestClient(application) as client:
         codes = [
             client.get(path).status_code for path in ("/declarations/1", "/declarations/1/file")
         ]
-    assert_that(codes, equal_to([404, 404]), "Result of another group is not hidden")
+    assert_that(codes, equal_to([404, 404]), "Result of another user is not hidden")
 
 
-def test_links_the_result_from_the_job_page_and_archive(tmp_path: Path) -> None:
+def test_links_the_result_from_the_page_of_the_session_and_back(tmp_path: Path) -> None:
     application = run_all(tmp_path)
     with TestClient(application) as client:
-        pages = (client.get("/jobs/1/status").text, client.get("/archive").text)
+        session = client.get("/sessions/1").text
+        result = client.get("/declarations/1").text
     assert_that(
-        ['href="/declarations/1"' in page for page in pages],
+        ['href="/declarations/1"' in session, 'href="/sessions/1"' in result],
         equal_to([True, True]),
-        "Job page and archive do not link to the result",
+        "Session and result page do not link to each other",
+    )
+
+
+def test_says_on_the_result_page_that_the_profile_was_not_built(tmp_path: Path) -> None:
+    application = run_all(tmp_path)
+    with TestClient(application) as client:
+        html = client.get("/declarations/1").text
+    assert_that(
+        html,
+        contains_string("Профиль полиса не собран"),
+        "Result page does not say that the profile is missing",
     )
 
 
 class Foreign:
-    """Passport of a person from a group that owns nothing."""
+    """Passport of a person who owns nothing."""
 
     def identity(self, token: str) -> Identity:
-        return Person("x", "x" + token, frozenset({"user"}), frozenset({"other"}))
+        return Person("x", "x" + token, frozenset({"user"}), frozenset())
