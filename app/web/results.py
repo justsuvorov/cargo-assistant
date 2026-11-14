@@ -9,21 +9,13 @@ from sqlalchemy import select
 
 from app.auth.identity import Identity
 from app.jobs.checking import Folder, Postponed
-from app.jobs.models import CheckResult, Correction, Declaration
-from app.web.security import identity, services
+from app.jobs.models import CheckResult, Correction
+from app.web.security import declaration_of, identity, services
 
 router = APIRouter()
 templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 _STATUSES = {"match": "совпадает", "mismatch": "не совпадает", "review": "требует проверки"}
 _XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
-
-async def seen(request: Request, who: Identity, declaration_id: int) -> Declaration:
-    async with services(request).database.session() as session:
-        found = await session.get(Declaration, declaration_id)
-    if found is None or not who.sees(found.access_group):
-        raise HTTPException(status_code=404, detail=f"Декларация {declaration_id} не найдена")
-    return found
 
 
 @router.get("/declarations/{declaration_id}", response_class=HTMLResponse)
@@ -33,7 +25,7 @@ async def result(
     who: Annotated[Identity, Depends(identity)],
     status: str = "",
 ) -> HTMLResponse:
-    declaration = await seen(request, who, declaration_id)
+    declaration = await declaration_of(request, who, declaration_id)
     query = select(CheckResult).where(CheckResult.declaration_id == declaration_id)
     async with services(request).database.session() as session:
         found = list((await session.scalars(query.order_by(CheckResult.id))).all())
@@ -72,7 +64,7 @@ async def result(
 async def download(
     declaration_id: int, request: Request, who: Annotated[Identity, Depends(identity)]
 ) -> Response:
-    declaration = await seen(request, who, declaration_id)
+    declaration = await declaration_of(request, who, declaration_id)
     if not declaration.result_key:
         raise HTTPException(status_code=404, detail="Файл результата ещё не готов")
     name = declaration.result_key.rsplit("/", 1)[-1]

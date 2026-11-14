@@ -9,6 +9,7 @@ def test_declares_all_tables_of_the_data_model() -> None:
         equal_to(
             {
                 "policies",
+                "workspaces",
                 "policy_documents",
                 "policy_profiles",
                 "declarations",

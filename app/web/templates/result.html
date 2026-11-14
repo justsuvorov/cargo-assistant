@@ -5,6 +5,12 @@
 <p>
   Версии: код {{ declaration.code_version or "—" }}, карточки {{ declaration.cards_version or "—" }}, профиль полиса {{ declaration.profile_version or "—" }}, промпты {{ declaration.prompts_version or "—" }}, модель {{ declaration.model or "—" }}.
 </p>
+{% if declaration.profile_status == "draft" %}
+<div class="alert problems" role="alert"><strong>Профиль полиса не подтверждён:</strong> проверка выполнена по черновику версии {{ declaration.profile_version }}.</div>
+{% elif declaration.profile_status == "missing" %}
+<div class="alert error" role="alert"><strong>Профиль полиса не собран:</strong> пункты полиса не проверены.</div>
+{% endif %}
+{% if declaration.workspace_id %}<p><a href="/sessions/{{ declaration.workspace_id }}">&larr; Сессия {{ declaration.workspace_id }}</a></p>{% endif %}
 <p>
   Файл: {{ declaration.file_name }}.
   {% if declaration.result_key %}<a href="/declarations/{{ declaration.id }}/file">Скачать результат (xlsx)</a>{% endif %}

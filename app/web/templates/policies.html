@@ -1,16 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-<h1>Полисы</h1>
-{% if expert %}
-<form method="post" action="/policies/upload" enctype="multipart/form-data" class="upload">
-  <p>Загрузите пакет полиса: архив zip или папку. Файлы ГП лежат в папке полиса (или в подпапке «ГП»),
-     все дополнительные соглашения — в папке «ДС».</p>
-  <p><label>Архив zip или файлы: <input type="file" name="files" multiple></label></p>
-  <p><label>Папка целиком: <input type="file" name="files" webkitdirectory multiple></label></p>
-  <button type="submit">Загрузить пакет и собрать профиль</button>
-</form>
-{% endif %}
-<h2>Загруженные полисы</h2>
+<h1>Профили полисов</h1>
+<p>Профиль собирается из генерального полиса и дополнительных соглашений папки при запуске сессии.
+   Здесь его можно проверить, поправить и подтвердить: следующие сессии по тем же файлам возьмут подтверждённый профиль.</p>
 {% if policies %}
 <table>
   <thead><tr><th>№</th><th>Номер ГП</th><th>Страхователь</th></tr></thead>
@@ -25,6 +17,6 @@
   </tbody>
 </table>
 {% else %}
-<p>Полисов пока нет.</p>
+<p>Профилей пока нет: они появляются после запуска первой сессии.</p>
 {% endif %}
 {% endblock %}

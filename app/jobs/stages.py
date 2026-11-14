@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final, Protocol, final
 
 from pydantic import BaseModel
+
 from app.core.journal import Journal
 from app.domain.semantics import Question, Semantics
 from app.domain.verdict import Verdict
@@ -31,8 +32,8 @@ from app.jobs.checking import (
     Tabled,
 )
 from app.jobs.database import Sessions
-from app.jobs.folios import Folio
 from app.jobs.errors import MissingProfileError, WaitingError
+from app.jobs.folios import Folio
 from app.jobs.models import Declaration, Job, Policy
 from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot

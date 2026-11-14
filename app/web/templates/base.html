@@ -12,8 +12,6 @@
     main { padding: 1.5rem; }
     table { border-collapse: collapse; }
     td, th { border: 1px solid #ccc; padding: 0.3rem 0.7rem; text-align: left; }
-    .drop { border: 2px dashed #889; padding: 2rem; text-align: center; margin-bottom: 1rem; }
-    .drop.over { background: #eef; }
     .alert { padding: 0.8rem 1rem; margin: 1rem 0; border-left: 6px solid; }
     .alert.problems { background: #fff3cd; border-color: #e0a800; font-size: 1.05rem; }
     .alert.error { background: #fde8e8; border-color: #c62828; }
@@ -31,14 +29,13 @@
   <div class="unprotected">Внимание: вход отключён, сервис доступен без проверки пользователя</div>
   {% endif %}
   <nav>
-    <a href="/policies" class="{{ 'current' if page == 'policies' }}">Полисы</a>
-    <a href="/reconcile" class="{{ 'current' if page == 'reconcile' }}">Сверка</a>
-    <a href="/archive" class="{{ 'current' if page == 'archive' }}">Архив</a>
+    <a href="/sessions/new" class="{{ 'current' if page == 'new' }}">Новая сессия</a>
+    <a href="/sessions" class="{{ 'current' if page == 'sessions' }}">Мои сессии</a>
+    <a href="/policies" class="{{ 'current' if page == 'policies' }}">Профили полисов</a>
     {% if not request.app.state.services.settings.development() %}
     <a href="/auth/logout">Выйти</a>
     {% endif %}
   </nav>
   <main>{% block content %}{% endblock %}</main>
-  <script src="/static/app.js"></script>
 </body>
 </html>

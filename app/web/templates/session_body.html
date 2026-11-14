@@ -1,0 +1,72 @@
+{% set workspace = view.workspace %}
+<div id="session-body"
+  {% if view.started() and not view.finished() %}hx-get="/sessions/{{ workspace.id }}/body" hx-trigger="every 3s" hx-swap="outerHTML"{% endif %}>
+<h1>Сессия {{ workspace.id }}: {{ workspace.name }}</h1>
+<p>Открыта {{ workspace.created_at }}{% if workspace.owner_name %}, {{ workspace.owner_name }}{% endif %}.
+  {% if view.started() %}Запущена {{ workspace.started_at }}.{% endif %}</p>
+{% if notice %}<div class="alert error" role="alert">{{ notice }}</div>{% endif %}
+
+{% if view.started() %}
+  {% set basis = view.basis %}
+  <h2>Профиль полиса</h2>
+  {% if basis.status == "approved" %}
+  <p>Профиль подтверждён, версия {{ basis.version }}. <a href="/policies/{{ view.policy.id }}">Открыть профиль</a></p>
+  {% elif basis.status == "draft" %}
+  <div class="alert problems" role="alert">
+    <strong>Профиль не подтверждён.</strong> Сверка идёт по черновику, версия {{ basis.version }}: проверьте его и подтвердите,
+    следующие сессии по тем же файлам возьмут подтверждённый профиль. <a href="/policies/{{ view.policy.id }}">Открыть профиль</a>
+  </div>
+  {% elif view.build and not view.build.finished() %}
+  <p>Профиль полиса собирается из генерального полиса и дополнительных соглашений, декларации ждут его.</p>
+  {% else %}
+  <div class="alert error" role="alert">
+    <strong>Профиль полиса не собран.</strong>
+    {% if view.build and view.build.error %}{{ view.build.error }}.{% endif %}
+    Проверки по пунктам полиса получат статус «требует проверки». <a href="/policies/{{ view.policy.id }}">Подробности</a>
+  </div>
+  {% endif %}
+  {% if basis.problems %}
+  <div class="alert problems" role="alert">
+    <strong>Проблемы пакета полиса ({{ basis.problems|length }})</strong>
+    <ul>{% for problem in basis.problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <h2>Декларации</h2>
+  <p>Готово {{ view.done() }} из {{ view.lines|length }}, <progress value="{{ view.progress() }}" max="100"></progress> {{ view.progress() }}%.
+    {% if view.results() %}<a href="/sessions/{{ workspace.id }}/archive">Скачать все файлы результата (zip)</a>{% endif %}</p>
+  <table>
+    <thead><tr><th>Файл</th><th>Номер</th><th>Состояние</th><th>Результат</th></tr></thead>
+    <tbody>
+    {% for line in view.lines %}
+    <tr>
+      <td>{{ line.path }}</td>
+      <td>{{ line.declaration.number }}</td>
+      <td>{% with job = line.job %}{% include "job.html" %}{% endwith %}</td>
+      <td>
+        {% if line.job.status == "done" %}
+        <a href="/declarations/{{ line.declaration.id }}">Страница</a>
+        {% if line.declaration.result_key %}| <a href="/declarations/{{ line.declaration.id }}/file">Скачать xlsx</a>{% endif %}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <h2>Декларации в папке</h2>
+  {% if workspace.found %}
+  <form method="post" action="/sessions/{{ workspace.id }}/start">
+    <p>Выберите декларации для сверки с генеральным полисом этой папки.</p>
+    <ul class="declarations">
+      {% for path in workspace.found %}
+      <li><label><input type="checkbox" name="declaration" value="{{ path }}" checked> {{ path }}</label></li>
+      {% endfor %}
+    </ul>
+    <button type="submit">Запустить</button>
+  </form>
+  {% else %}
+  <p>В папке не найдено деклараций: они лежат в подпапках (например, «Декларации/Июнь»), а не рядом с генеральным полисом и не в папках «ДС» и «Особые условия».</p>
+  {% endif %}
+{% endif %}
+</div>

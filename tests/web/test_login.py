@@ -112,7 +112,7 @@ def settings(folder: Path, provider: Provider, extra: str = "") -> EnvSettings:
     return EnvSettings(Environment(str(folder / ".env")))
 
 
-def signed_in(client: TestClient, provider: Provider, target: str = "/reconcile") -> Response:
+def signed_in(client: TestClient, provider: Provider, target: str = "/sessions") -> Response:
     start: Response = client.get(f"/auth/login?next={target}")
     query = parse_qs(urlparse(start.headers["location"]).query)
     provider.challenges["the-code"] = query["code_challenge"][0]
@@ -128,12 +128,12 @@ def test_sends_page_without_session_to_login(tmp_path: Path) -> None:
     provider = Provider(claims())
     try:
         with TestClient(create_app(settings(tmp_path, provider)), follow_redirects=False) as client:
-            response = client.get("/archive?month=2030-01")
+            response = client.get("/sessions?state=open")
     finally:
         provider.close()
     assert_that(
         (response.status_code, response.headers["location"]),
-        equal_to((302, "/auth/login?next=%2Farchive%3Fmonth%3D2030-01")),
+        equal_to((302, "/auth/login?next=%2Fsessions%3Fstate%3Dopen")),
         "Page without a session does not send the visitor to login",
     )
 
@@ -172,13 +172,13 @@ def test_opens_pages_after_login_and_returns_to_requested_page(tmp_path: Path) -
     provider = Provider(claims())
     try:
         with TestClient(create_app(settings(tmp_path, provider)), follow_redirects=False) as client:
-            arrived = signed_in(client, provider, "/archive")
-            page = client.get("/archive")
+            arrived = signed_in(client, provider, "/sessions/new")
+            page = client.get("/sessions/new")
     finally:
         provider.close()
     assert_that(
         (arrived.status_code, arrived.headers["location"], page.status_code),
-        equal_to((302, "/archive", 200)),
+        equal_to((302, "/sessions/new", 200)),
         "Visitor is not let in after login",
     )
 
@@ -254,7 +254,7 @@ def test_sends_visitor_to_login_again_when_session_is_forged(tmp_path: Path) -> 
     try:
         with TestClient(create_app(settings(tmp_path, provider)), follow_redirects=False) as client:
             client.cookies.set("cargo_session", "e30=.forged")
-            response = client.get("/reconcile")
+            response = client.get("/sessions")
     finally:
         provider.close()
     assert_that(response.status_code, equal_to(302), "Forged session is not sent to login")
@@ -266,7 +266,7 @@ def test_ends_session_on_logout_and_asks_keycloak_to_end_its_own(tmp_path: Path)
         with TestClient(create_app(settings(tmp_path, provider)), follow_redirects=False) as client:
             signed_in(client, provider)
             leaving = client.get("/auth/logout")
-            after = client.get("/reconcile")
+            after = client.get("/sessions")
     finally:
         provider.close()
     assert_that(
@@ -313,7 +313,7 @@ def test_needs_no_login_when_login_is_disabled(tmp_path: Path) -> None:
             create_app(settings(tmp_path, provider, "AUTH_DISABLED=true\nAUTH_DEV_USER_ID=me\n")),
             follow_redirects=False,
         ) as client:
-            codes = (client.get("/reconcile").status_code, client.get("/auth/login").status_code)
+            codes = (client.get("/sessions").status_code, client.get("/auth/login").status_code)
     finally:
         provider.close()
     assert_that(codes, equal_to((200, 302)), "Disabled login does not skip the login page")
