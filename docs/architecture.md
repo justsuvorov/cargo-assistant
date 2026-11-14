@@ -165,6 +165,11 @@ knowledge/{ruleset_id}/source/{имя файла}
 статуса экспертом), Архив (фильтр по месяцу и полису, архив), База знаний (карточки, подтверждение,
 активация), Качество (прогоны эталона).
 
+Вход (T-37, D-47): страницы — authorization code flow с PKCE, роуты `/auth/login`, `/auth/callback`,
+`/auth/logout`; cookie сессии подписана `SESSION_SECRET` (HMAC), хранит sub, имя, роли и группы;
+API — Bearer-токен Keycloak. Пользователь — `sub`, имя — `preferred_username`. При `AUTH_DISABLED=true`
+все работают как `AUTH_DEV_USER_ID`. Модули: `app/auth/seal.py`, `exchange.py`, `app/web/login.py`.
+
 Роли Keycloak (названия уточнить): `cargo_user` — загрузка деклараций и просмотр; `cargo_expert` —
 загрузка пакетов полисов, правка и подтверждение профилей, исправление результатов; `cargo_admin` — база знаний и качество.
 Видимость данных — по группе.
