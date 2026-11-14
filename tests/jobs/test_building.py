@@ -104,7 +104,7 @@ async def build(tmp_path: Path, files: tuple[Blob, ...], model: Model) -> tuple[
     (tmp_path / ".env").write_text("WORKER_JOB_TIMEOUT=60\n", encoding="utf-8")
     pipelines = Building(
         Workbench(storage, tmp_path / "soffice"),
-        Folios(database, queue, Utc()),
+        Folios(database, Utc()),
         shelving,
         Given(model, []),
         Silent(),
@@ -124,7 +124,7 @@ async def saves_draft_with_requisites_from_the_model(tmp_path: Path) -> tuple[st
         "profile.amendment.1": json.dumps({"passages": []}),
     }
     database, policy, job = await build(tmp_path, package(number), FakeModel(answers))
-    profile = (await Folios(database, Queue(database, Utc()), Utc()).latest(policy)).profile
+    profile = (await Folios(database, Utc()).latest(policy)).profile
     snapshot = await Queue(database, Utc()).snapshot(job)
     await database.close()
     return (profile.number == number and "x") or "", profile.issued, snapshot.status

@@ -27,3 +27,18 @@ class LostError(Exception):
     """Attempt of a job that was stopped or taken away and so must write nothing."""
 
     __slots__ = ()
+
+
+@final
+class MissingWorkspaceError(Exception):
+    """Session that does not exist or belongs to another user."""
+
+    __slots__ = ()
+
+
+@final
+class ChoiceError(Exception):
+    """Choice of declarations that cannot be started: it is empty, names a file that is not in
+    the folder, or the session was started before."""
+
+    __slots__ = ()

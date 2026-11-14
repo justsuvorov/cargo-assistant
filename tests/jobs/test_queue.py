@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.core.clock import Utc
 from app.jobs.database import Database
-from app.jobs.models import Base, Job, JobRun
+from app.jobs.models import Base, Declaration, Job, JobRun, Policy, PolicyProfile
 from app.jobs.queue import Queue
 
 
@@ -246,4 +246,64 @@ def test_closes_open_attempt_as_error_when_attempts_are_exhausted(tmp_path: Path
         asyncio.run(asyncio.wait_for(attempt_after_revive(tmp_path, 1), 30)),
         equal_to(("error", "AttemptsExceeded", "error")),
         "Exhausted job does not close its open attempt and session as errors",
+    )
+
+
+async def resumed_job_of_policy(tmp_path: Path, *, profile: bool, build: str) -> str:
+    database = await prepare(tmp_path)
+    queue = Queue(database, Utc())
+    async with database.session() as session:
+        built = await queue.add(session, "profile_build", {"policy_id": 1})
+        waiting = await queue.add(session, "reconcile", {"declaration_id": 1})
+        session.add(Policy(owner="u", package_sha="s", job_id=built))
+        await session.flush()
+        session.add(
+            Declaration(
+                owner="u",
+                policy_id=1,
+                job_id=waiting,
+                file_name="a",
+                created_at=datetime(2026, 1, 1),
+            )
+        )
+        if profile:
+            session.add(PolicyProfile(policy_id=1, version=1, body={}, status="draft"))
+        await session.commit()
+    await queue.claim(2)
+    await queue.wait(waiting, "Ожидает сборки профиля полиса")
+    if build == "failed":
+        await queue.fail(built, "нет модели")
+    await queue.resume()
+    status = (await queue.snapshot(waiting)).status
+    await database.close()
+    return status
+
+
+def test_resumes_waiting_job_when_policy_has_a_profile(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(resumed_job_of_policy(tmp_path, profile=True, build="running"), 30)
+        ),
+        equal_to("queued"),
+        "Job is not resumed when the profile of its policy appeared",
+    )
+
+
+def test_resumes_waiting_job_when_build_of_the_profile_failed(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(resumed_job_of_policy(tmp_path, profile=False, build="failed"), 30)
+        ),
+        equal_to("queued"),
+        "Job is not resumed when the build of the profile failed",
+    )
+
+
+def test_keeps_waiting_job_while_the_profile_is_being_built(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(
+            asyncio.wait_for(resumed_job_of_policy(tmp_path, profile=False, build="running"), 30)
+        ),
+        equal_to("waiting"),
+        "Job is resumed while its profile is still being built",
     )

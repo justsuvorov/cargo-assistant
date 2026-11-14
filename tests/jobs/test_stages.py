@@ -62,7 +62,7 @@ async def prepare(path: Path, *, bound: bool) -> tuple[Database, Folios]:
             )
         )
         await session.commit()
-    return database, Folios(database, Queue(database, Utc()), Utc())
+    return database, Folios(database, Utc())
 
 
 async def waits_for_approved_profile_of_bound_policy(tmp_path: Path) -> str:

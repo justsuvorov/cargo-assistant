@@ -146,7 +146,7 @@ class Stand:
         self.database = Database(f"sqlite+aiosqlite:///{folder / 's.db'}")
         self.storage = DiskStorage(folder / "files")
         self.queue = Queue(self.database, Utc())
-        self.folio = Folios(self.database, self.queue, Utc())
+        self.folio = Folios(self.database, Utc())
         self.pool = ThreadPoolExecutor(2)
         self.judge = judge
         self.folder = folder

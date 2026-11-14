@@ -60,7 +60,7 @@ def create_app(settings: Settings) -> FastAPI:
         queue,
         Intake(database, queue, storage, Keys(), Utc()),
         Shelving(database, queue, storage, Keys()),
-        Folios(database, queue, Utc()),
+        Folios(database, Utc()),
         passport(settings),
         session(settings, seal),
         seal,

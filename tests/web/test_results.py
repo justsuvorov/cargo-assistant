@@ -84,7 +84,7 @@ async def work(config: EnvSettings) -> int:
         Postponing(),
         ThreadPoolExecutor(2),
     )
-    pipelines = Standard(Silent(), Folios(database, queue, Utc()), database, bench, kit)
+    pipelines = Standard(Silent(), Folios(database, Utc()), database, bench, kit)
     count = await Shift(queue, pipelines, config, Silent(), Blank()).drain()
     await database.close()
     return count

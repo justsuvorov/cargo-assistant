@@ -97,7 +97,7 @@ async def work(config: EnvSettings, model: Model) -> None:
     storage = DiskStorage(config.storage())
     building = Building(
         Workbench(storage, config.soffice()),
-        Folios(database, queue, Utc()),
+        Folios(database, Utc()),
         Shelving(database, queue, storage, Keys()),
         Given(model, []),
         Silent(),

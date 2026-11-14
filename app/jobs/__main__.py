@@ -36,7 +36,7 @@ async def run() -> None:
     journal = LogJournal(logging.getLogger("worker"))
     journal.info("Воркер запущен", 0, 0)
     queue = Queue(database, Utc())
-    folio = Folios(database, queue, Utc())
+    folio = Folios(database, Utc())
     gateway = Gateway(
         Configured(
             environment,

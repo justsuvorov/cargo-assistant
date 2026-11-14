@@ -15,6 +15,7 @@ def upgrade() -> None:
         sa.Column("owner_name", sa.String(128), nullable=False, server_default=""),
         sa.Column("name", sa.String(255), nullable=False, server_default=""),
         sa.Column("found", sa.JSON, nullable=False),
+        sa.Column("package_sha", sa.String(64), nullable=False, server_default=""),
         sa.Column("policy_id", sa.Integer, sa.ForeignKey("policies.id"), nullable=True),
         sa.Column("created_at", sa.DateTime, nullable=False),
         sa.Column("started_at", sa.DateTime, nullable=True),

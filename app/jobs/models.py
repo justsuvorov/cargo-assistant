@@ -50,6 +50,7 @@ class Workspace(Base):
     owner_name: Mapped[str] = mapped_column(String(128), default="")
     name: Mapped[str] = mapped_column(String(255), default="")
     found: Mapped[list[str]] = mapped_column(JSON, default=list)
+    package_sha: Mapped[str] = mapped_column(String(64), default="")
     policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
