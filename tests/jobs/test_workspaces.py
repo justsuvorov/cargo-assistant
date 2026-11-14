@@ -1,10 +1,14 @@
 import asyncio
+import os
 import random
 import string
+import uuid
 from pathlib import Path
 
+import pytest
 from hamcrest import assert_that, equal_to, raises
-from sqlalchemy import select
+from sqlalchemy import make_url, select
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.clock import Utc
 from app.jobs.building import Workbench
@@ -210,4 +214,58 @@ def test_refuses_to_start_a_session_twice(tmp_path: Path) -> None:
         lambda: asyncio.run(asyncio.wait_for(starts_as(tmp_path, "owner", (_FIRST,), 2), 60)),
         raises(ChoiceError),
         "Second start of a session is not refused",
+    )
+
+
+async def administer(url: str, statement: str) -> None:
+    engine = create_async_engine(url, isolation_level="AUTOCOMMIT")
+    async with engine.connect() as connection:
+        await connection.exec_driver_sql(statement)
+    await engine.dispose()
+
+
+async def starts_at_once_on_postgres(tmp_path: Path) -> tuple[int, int, int]:
+    base = os.environ["TEST_DATABASE_URL"]
+    name = f"t36_{uuid.uuid4().hex}"
+    await administer(base, f"CREATE DATABASE {name}")
+    try:
+        database = Database(make_url(base).set(database=name).render_as_string(False))
+        async with database.session() as session:
+            connection = await session.connection()
+            await connection.run_sync(Base.metadata.create_all)
+            await session.commit()
+        storage = DiskStorage(tmp_path / "files")
+        filing = Filing(
+            database,
+            Queue(database, Utc()),
+            (storage, Keys(), Workbench(storage, tmp_path / "home")),
+            Utc(),
+        )
+        owner = word()
+        first = await filing.open(owner, "A", "Пример", folder())
+        second = await filing.open(owner, "A", "Пример", folder())
+        await asyncio.gather(
+            filing.start(owner, first, (_FIRST,)), filing.start(owner, second, (_SECOND,))
+        )
+        async with database.session() as session:
+            policies = len((await session.scalars(select(Policy))).all())
+            builds = len(
+                (await session.scalars(select(Job).where(Job.kind == "profile_build"))).all()
+            )
+            declarations = len((await session.scalars(select(Declaration))).all())
+        await database.close()
+        return policies, builds, declarations
+    finally:
+        await administer(base, f"DROP DATABASE IF EXISTS {name} WITH (FORCE)")
+
+
+@pytest.mark.postgres
+@pytest.mark.skipif(not os.environ.get("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL is unset")
+def test_gives_two_sessions_started_at_once_one_policy_and_one_build_on_postgres(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(starts_at_once_on_postgres(tmp_path), 120)),
+        equal_to((1, 1, 2)),
+        "Two sessions started at once do not share one policy and one build of its profile",
     )
