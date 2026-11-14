@@ -38,17 +38,17 @@ _DEFENSE = [
 ]
 
 
-def test_finds_conditions_of_policy_by_normalized_number(tmp_path: Path) -> None:
-    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP})).find("77 ab 01", "")
+def test_finds_conditions_of_policy_by_number_as_the_card_compares_it(tmp_path: Path) -> None:
+    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP}), ("№",)).find("№ 77AB01", "")
     assert_that(
         [item.text() for item in found.items()],
-        contains_exactly("Без франшизы", "Курьерский груз исключён"),
-        "SharedFile does not find the non-blank conditions of the policy by its normalized number",
+        contains_exactly("Без франшизы"),
+        "SharedFile does not find the conditions by the number without spaces and signs",
     )
 
 
 def test_names_book_sheet_and_row_as_source(tmp_path: Path) -> None:
-    found = SharedFile(_book(tmp_path / "fsc.xlsx", {"ГП": _GP})).find("99ZZ02", "")
+    found = SharedFile(_book(tmp_path / "fsc.xlsx", {"ГП": _GP}), ("№",)).find("99ZZ02", "")
     assert_that(
         found.items()[0].source(),
         equal_to("общий файл fsc.xlsx, лист «ГП», строка 4"),
@@ -57,10 +57,10 @@ def test_names_book_sheet_and_row_as_source(tmp_path: Path) -> None:
 
 
 def test_finds_defense_row_by_contract_or_insurant(tmp_path: Path) -> None:
-    shared = SharedFile(_book(tmp_path / "a.xlsx", {"оборонный": _DEFENSE}))
+    shared = SharedFile(_book(tmp_path / "a.xlsx", {"оборонный": _DEFENSE}), ("№",))
     assert_that(
         (
-            shared.find("55 dd", "").items()[0].text(),
+            shared.find("55 DD", "").items()[0].text(),
             shared.find("", "ооо оборона-1").items()[0].text(),
             shared.find("00", "Другой").items(),
         ),
@@ -78,7 +78,7 @@ def test_finds_defense_row_by_contract_or_insurant(tmp_path: Path) -> None:
 
 
 def test_reports_absent_file_without_failing(tmp_path: Path) -> None:
-    found = SharedFile(tmp_path / "none.xlsx").find("77AB01", "")
+    found = SharedFile(tmp_path / "none.xlsx", ("№",)).find("77AB01", "")
     assert_that(
         (found.items(), found.problems()),
         equal_to(((), ("общий файл особых условий none.xlsx не найден",))),
@@ -88,7 +88,7 @@ def test_reports_absent_file_without_failing(tmp_path: Path) -> None:
 
 def test_reports_not_configured_path() -> None:
     assert_that(
-        SharedFile(Path("")).find("77AB01", "").problems(),
+        SharedFile(Path(""), ("№",)).find("77AB01", "").problems(),
         contains_exactly("путь к общему файлу особых условий не задан"),
         "SharedFile does not report an empty path as a reason",
     )
@@ -96,7 +96,7 @@ def test_reports_not_configured_path() -> None:
 
 def test_reports_absent_sheets_and_columns(tmp_path: Path) -> None:
     path = _book(tmp_path / "a.xlsx", {"ГП": [["Другое", "Ещё"], ["1", "2"]]})
-    found = SharedFile(path).find("77AB01", "Ромашка")
+    found = SharedFile(path, ("№",)).find("77AB01", "Ромашка")
     assert_that(
         (found.items(), len(found.problems())),
         equal_to(((), 2)),
@@ -105,7 +105,7 @@ def test_reports_absent_sheets_and_columns(tmp_path: Path) -> None:
 
 
 def test_reports_no_rows_for_policy(tmp_path: Path) -> None:
-    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP, "ОБОРОННЫЙ": _DEFENSE})).find(
+    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP, "ОБОРОННЫЙ": _DEFENSE}), ("№",)).find(
         "11XX11", "Нет такого"
     )
     assert_that(
@@ -118,7 +118,7 @@ def test_reports_no_rows_for_policy(tmp_path: Path) -> None:
 def test_reports_broken_file_without_failing(tmp_path: Path) -> None:
     (tmp_path / "a.xlsx").write_text("не книга", encoding="utf-8")
     assert_that(
-        SharedFile(tmp_path / "a.xlsx").find("77AB01", "").problems(),
+        SharedFile(tmp_path / "a.xlsx", ("№",)).find("77AB01", "").problems(),
         equal_to(("общий файл особых условий a.xlsx не читается",)),
         "SharedFile does not report an unreadable workbook as a reason",
     )
@@ -143,7 +143,7 @@ def test_client_file_without_lines_reports_reason() -> None:
 
 
 def test_joined_puts_client_conditions_first(tmp_path: Path) -> None:
-    shared = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP}))
+    shared = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": _GP}), ("№",))
     found = Joined((ClientFile(_Written(("Своё",))), shared)).find("99ZZ02", "")
     assert_that(
         [(item.text(), item.prevails()) for item in found.items()],
@@ -153,7 +153,9 @@ def test_joined_puts_client_conditions_first(tmp_path: Path) -> None:
 
 
 def test_joined_keeps_problems_of_every_part(tmp_path: Path) -> None:
-    found = Joined((ClientFile(_Written(())), SharedFile(tmp_path / "x.xlsx"))).find("1", "")
+    found = Joined((ClientFile(_Written(())), SharedFile(tmp_path / "x.xlsx", ("№",)))).find(
+        "1", ""
+    )
     assert_that(
         (found.items(), found.problems()),
         equal_to(
@@ -171,7 +173,7 @@ def test_joined_keeps_problems_of_every_part(tmp_path: Path) -> None:
 
 def test_does_not_give_whole_workbook(tmp_path: Path) -> None:
     rows = [_GP[0]] + [[f"Клиент {n}", f"N{n}", f"Условие {n}"] for n in range(300)]
-    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": rows})).find("N7", "")
+    found = SharedFile(_book(tmp_path / "a.xlsx", {"ГП": rows}), ("№",)).find("N7", "")
     assert_that(
         [item.text() for item in found.items()],
         equal_to(["Условие 7"]),

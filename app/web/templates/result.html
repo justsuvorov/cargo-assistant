@@ -23,6 +23,24 @@
   | <a href="/declarations/{{ declaration.id }}?status={{ key }}">{{ text }} ({{ counts[key] }})</a>
   {% endfor %}
 </p>
+<h2>Особые условия</h2>
+{% if declaration.conditions %}
+<table id="conditions">
+  <thead><tr><th>Условие</th><th>Источник</th><th>Приоритет</th></tr></thead>
+  <tbody>
+  {% for text, source, priority in declaration.conditions %}
+  <tr><td>{{ text }}</td><td>{{ source }}</td><td>{{ priority }}</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="alert problems" role="alert" id="conditions">
+  <strong>Особые условия не найдены, их нет среди проверенных.</strong>
+  {% if declaration.conditions_problems %}
+  <ul>{% for problem in declaration.conditions_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  {% endif %}
+</div>
+{% endif %}
 {% if rows %}
 <table>
   <thead>

@@ -24,7 +24,9 @@ def upgrade() -> None:
     with op.batch_alter_table("policies") as batch:
         batch.add_column(sa.Column("owner", sa.String(128), nullable=False, server_default=""))
         batch.add_column(sa.Column("package_sha", sa.String(64), nullable=False, server_default=""))
-        batch.add_column(sa.Column("package_key", sa.String(512), nullable=False, server_default=""))
+        batch.add_column(
+            sa.Column("package_key", sa.String(512), nullable=False, server_default="")
+        )
     op.execute("UPDATE policies SET package_sha = 'legacy-' || CAST(id AS VARCHAR(20))")
     with op.batch_alter_table("policies") as batch:
         batch.create_index("ix_policies_owner", ["owner"])
@@ -37,7 +39,9 @@ def upgrade() -> None:
         batch.add_column(
             sa.Column("profile_status", sa.String(16), nullable=False, server_default="")
         )
-        batch.create_foreign_key("fk_declarations_workspace", "workspaces", ["workspace_id"], ["id"])
+        batch.create_foreign_key(
+            "fk_declarations_workspace", "workspaces", ["workspace_id"], ["id"]
+        )
         batch.create_index("ix_declarations_owner", ["owner"])
         batch.create_index("ix_declarations_workspace_id", ["workspace_id"])
         batch.drop_index("ix_declarations_access_group")

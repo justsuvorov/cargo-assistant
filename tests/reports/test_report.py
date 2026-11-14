@@ -11,13 +11,13 @@ from app.domain.declaration import Declaration
 from app.domain.policy import Policy, Vacant
 from app.domain.status import Match
 from app.reports.errors import ReportError
-from app.reports.report import Report
+from app.reports.report import Report, Stated
 from app.rules.card import Ruled
 from app.rules.cards import Cards
 from app.rules.probe import Constant
 from app.rules.rows import Rowwise
 from app.rules.wording import Comments
-from tests.rules.fakes import Mute, Paper, Profile
+from tests.rules.fakes import Mute, Paper
 
 
 def _cards(form: str) -> tuple[Card, ...]:
@@ -66,7 +66,7 @@ def _row(cargo: str) -> Mapping[str, tuple[str, ...]]:
 
 
 def _sheet(declaration: Declaration, policy: Policy, folder: Path) -> tuple[tuple[str, ...], ...]:
-    report = Report(declaration, policy, _cards(declaration.form()))
+    report = Report(declaration, policy, _cards(declaration.form()), Stated((), ()))
     report.save(folder / report.name())
     return tuple(
         tuple(str(value or "") for value in row)
@@ -203,7 +203,7 @@ def test_saved_rows_are_the_verdicts_of_the_cards(tmp_path: Path) -> None:
 
 
 def test_status_cells_are_coloured(tmp_path: Path) -> None:
-    report = Report(_vertical("304"), Vacant("1"), _cards("vertical"))
+    report = Report(_vertical("304"), Vacant("1"), _cards("vertical"), Stated((), ()))
     report.save(tmp_path / report.name())
     sheet = load_workbook(tmp_path / report.name()).worksheets[0]
     assert_that(
@@ -217,7 +217,9 @@ def test_status_cells_are_coloured(tmp_path: Path) -> None:
 
 
 def test_mismatch_cell_is_red(tmp_path: Path) -> None:
-    report = Report(Paper("305", "psg", (_row("Бумага"),)), Vacant("1"), _cards("psg"))
+    report = Report(
+        Paper("305", "psg", (_row("Бумага"),)), Vacant("1"), _cards("psg"), Stated((), ())
+    )
     report.save(tmp_path / report.name())
     assert_that(
         load_workbook(tmp_path / report.name()).worksheets[0].cell(7, 4).fill.fgColor.rgb,
@@ -227,7 +229,7 @@ def test_mismatch_cell_is_red(tmp_path: Path) -> None:
 
 
 def test_header_follows_the_answer_form(tmp_path: Path) -> None:
-    report = Report(_vertical("306"), Vacant("1"), _cards("vertical"))
+    report = Report(_vertical("306"), Vacant("1"), _cards("vertical"), Stated((), ()))
     report.save(tmp_path / report.name())
     assert_that(
         tuple(cell.value for cell in load_workbook(tmp_path / report.name()).worksheets[0][1]),
@@ -244,20 +246,37 @@ def test_header_follows_the_answer_form(tmp_path: Path) -> None:
     )
 
 
-def test_second_sheet_lists_the_special_conditions(tmp_path: Path) -> None:
-    conditions = (f"Условие {uuid.uuid4().hex}", f"Условие {uuid.uuid4().hex}")
-    report = Report(_vertical("307"), Profile({}, conditions), _cards("vertical"))
+def test_second_sheet_lists_the_special_conditions_with_source_and_priority(
+    tmp_path: Path,
+) -> None:
+    rows = (
+        (f"Условие {uuid.uuid4().hex}", "файл клиента", "выше"),
+        (f"Условие {uuid.uuid4().hex}", "общий файл", "обычный"),
+    )
+    report = Report(_vertical("307"), Vacant("1"), _cards("vertical"), Stated(rows, ()))
     report.save(tmp_path / report.name())
     sheet = load_workbook(tmp_path / report.name())["Особые условия"]
     assert_that(
-        tuple(row[0] for row in sheet.iter_rows(min_row=2, values_only=True)),
-        equal_to(conditions),
-        "Report does not list the special conditions on the second sheet",
+        tuple(sheet.iter_rows(values_only=True)),
+        equal_to((("Условие", "Источник", "Приоритет"), *rows)),
+        "Report does not list the conditions with their source and priority on the second sheet",
+    )
+
+
+def test_second_sheet_tells_the_reasons_when_there_are_no_conditions(tmp_path: Path) -> None:
+    reason = uuid.uuid4().hex
+    report = Report(_vertical("310"), Vacant("1"), _cards("vertical"), Stated((), (reason, "ещё")))
+    report.save(tmp_path / report.name())
+    sheet = load_workbook(tmp_path / report.name())["Особые условия"]
+    assert_that(
+        tuple(sheet.iter_rows(min_row=2, values_only=True)),
+        equal_to(((f"Особые условия не найдены: {reason}; ещё", None, None),)),
+        "Report does not give the reasons in one row when no conditions are found",
     )
 
 
 def test_slash_in_the_number_does_not_break_the_file_name(tmp_path: Path) -> None:
-    report = Report(_vertical("13444-2/Р"), Vacant("1"), _cards("vertical"))
+    report = Report(_vertical("13444-2/Р"), Vacant("1"), _cards("vertical"), Stated((), ()))
     report.save(tmp_path / report.name())
     assert_that(
         tuple(path.name for path in tmp_path.iterdir()),
@@ -278,6 +297,7 @@ def test_card_without_a_verdict_for_a_row_fails_loudly(tmp_path: Path) -> None:
         _vertical("308"),
         Vacant("1"),
         (Ruled("sealing", {"vertical": "Пломбирование"}, "НЕ ОБЯЗАТЕЛЕН", _Silent()),),
+        Stated((), ()),
     )
     assert_that(
         lambda: report.save(tmp_path / report.name()),
@@ -298,6 +318,7 @@ def test_unrelated_cards_fail_loudly(tmp_path: Path) -> None:
                 Rowwise("sealing", Constant(Match(), "filled"), Comments({"match": ""}), Mute()),
             ),
         ),
+        Stated((), ()),
     )
     assert_that(
         lambda: report.save(tmp_path / report.name()),

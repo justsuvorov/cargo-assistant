@@ -22,3 +22,14 @@ async def opened(files: list[UploadFile]) -> tuple[str, tuple[Stored, ...]]:
     except (EscapeError, BrokenError) as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     return name or "Папка без названия", found
+
+
+async def chosen(files: list[UploadFile] | None) -> tuple[Stored, ...]:
+    """Special conditions file of the client that a user chose apart from the folder, if any:
+    a field left empty by the browser gives nothing, a path is cut to the name of the file."""
+    found: list[Stored] = []
+    for file in files or []:
+        data = await file.read()
+        if file.filename and data:
+            found.append(Blob(PurePosixPath(file.filename.replace("\\", "/")).name, data))
+    return tuple(found)

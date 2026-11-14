@@ -43,18 +43,21 @@ class Errand:
     number, a question without an answer and a failed call give review with their own code;
     the call is written to the journal with its card, number of questions and outcome."""
 
-    __slots__ = ("_journal", "_model", "_questions")
+    __slots__ = ("_brief", "_journal", "_model", "_questions")
 
-    def __init__(self, model: Model, journal: Journal, questions: tuple[Question, ...]) -> None:
+    def __init__(
+        self, model: Model, journal: Journal, questions: tuple[Question, ...], brief: Brief
+    ) -> None:
         self._model: Final = model
         self._journal: Final = journal
         self._questions: Final = questions
+        self._brief: Final = brief
 
     def verdicts(self) -> tuple[Verdict, ...]:
         field = self._questions[0].place().field()
         try:
             judgements = self._model.answer(
-                f"semantic.{field}", Brief().messages(self._questions), Judgements
+                f"semantic.{field}", self._brief.messages(self._questions), Judgements
             )
         except MalformedError:
             return self._failed(
@@ -112,13 +115,15 @@ class Bench:
     of calls per declaration does not grow with its rows, and values beyond them need a
     person; all packs of all cards are asked in parallel under the semaphore of the model."""
 
-    __slots__ = ("_journal", "_model", "_packs", "_size")
+    __slots__ = ("_brief", "_journal", "_limits", "_model")
 
-    def __init__(self, model: Model, journal: Journal, packs: int, size: int) -> None:
+    def __init__(
+        self, model: Model, journal: Journal, packs: int, size: int, notes: tuple[str, ...] = ()
+    ) -> None:
         self._model: Final = model
         self._journal: Final = journal
-        self._packs: Final = packs
-        self._size: Final = size
+        self._limits: Final = (packs, size)
+        self._brief: Final = Brief(notes)
 
     def verdicts(self, questions: tuple[Question, ...]) -> tuple[Verdict, ...]:
         first: dict[tuple[str, ...], Question] = {}
@@ -128,9 +133,11 @@ class Bench:
         for question in first.values():
             cards.setdefault(question.place().field(), []).append(question)
         packs = tuple(
-            tuple(asked[start : start + self._size])
+            tuple(asked[start : start + self._limits[1]])
             for asked in cards.values()
-            for start in range(0, min(len(asked), self._packs * self._size), self._size)
+            for start in range(
+                0, min(len(asked), self._limits[0] * self._limits[1]), self._limits[1]
+            )
         )
         with ThreadPoolExecutor(max_workers=max(1, len(packs))) as pool:
             answered = {
@@ -138,7 +145,10 @@ class Bench:
                 for pack, judged in zip(
                     packs,
                     pool.map(
-                        lambda pack: Errand(self._model, self._journal, pack).verdicts(), packs
+                        lambda pack: Errand(
+                            self._model, self._journal, pack, self._brief
+                        ).verdicts(),
+                        packs,
                     ),
                     strict=True,
                 )

@@ -6,6 +6,7 @@ from typing import Final, Protocol, final
 from openpyxl import load_workbook
 from openpyxl.utils.exceptions import InvalidFileException
 
+from app.domain.numbers import Numbered, Numbers
 from app.policy.outcome import Outcome, Result
 
 
@@ -80,9 +81,6 @@ class Spelling:
     def title(self) -> str:
         return "".join(self._raw.lower().split())
 
-    def number(self) -> str:
-        return "".join(self._raw.upper().split())
-
     def name(self) -> str:
         return " ".join(re.sub(r"[«»\"']", "", self._raw).lower().split())
 
@@ -147,11 +145,12 @@ class Missing:
 class GeneralSheet:
     """Sheet of general policies where the row of the policy number holds its special conditions."""
 
-    __slots__ = ("_book", "_page")
+    __slots__ = ("_book", "_numbers", "_page")
 
-    def __init__(self, page: Page, book: str) -> None:
+    def __init__(self, page: Page, book: str, numbers: Numbers) -> None:
         self._page: Final = page
         self._book: Final = book
+        self._numbers: Final = numbers
 
     def find(self, number: str, _insurant: str) -> Outcome[Condition]:
         if self._page.absence():
@@ -166,8 +165,7 @@ class GeneralSheet:
                     prevails=False,
                 )
                 for line in self._page.lines()
-                if number
-                and Spelling(self._page.cell(line, "№ Генерального полиса")).number() == number
+                if self._numbers.same(number, self._page.cell(line, "№ Генерального полиса"))
                 and self._page.cell(line, "Особые условия")
             ),
             (),
@@ -178,11 +176,12 @@ class GeneralSheet:
 class DefenseSheet:
     """Sheet of defense clients where the presence of a row is itself the special condition."""
 
-    __slots__ = ("_book", "_page")
+    __slots__ = ("_book", "_numbers", "_page")
 
-    def __init__(self, page: Page, book: str) -> None:
+    def __init__(self, page: Page, book: str, numbers: Numbers) -> None:
         self._page: Final = page
         self._book: Final = book
+        self._numbers: Final = numbers
 
     def find(self, number: str, insurant: str) -> Outcome[Condition]:
         if self._page.absence():
@@ -215,7 +214,7 @@ class DefenseSheet:
 
     def _same(self, line: int, number: str, insurant: str) -> bool:
         wanted = Spelling(insurant).name()
-        return (bool(number) and Spelling(self._page.cell(line, "Договор")).number() == number) or (
+        return self._numbers.same(number, self._page.cell(line, "Договор")) or (
             bool(wanted) and Spelling(self._page.cell(line, "Страхователь")).name() == wanted
         )
 
@@ -258,12 +257,15 @@ class SharedFile:
     """Lookup over the shared workbook of the insurer, of which only the matching rows are given.
 
     The sheets are told apart by name and the columns by the title, both without case and spaces.
+    Numbers are compared as the card of the policy field compares them, ignoring the given
+    characters.
     """
 
-    __slots__ = ("_path",)
+    __slots__ = ("_ignore", "_path")
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, ignore: tuple[str, ...]) -> None:
         self._path: Final = path
+        self._ignore: Final = ignore
 
     def find(self, number: str, insurant: str) -> Outcome[Condition]:
         if self._path == Path(""):
@@ -275,12 +277,13 @@ class SharedFile:
         except (InvalidFileException, zipfile.BadZipFile, OSError):
             return Result((), (f"общий файл особых условий {self._path.name} не читается",))
         book = f"общий файл {self._path.name}"
+        numbers = Numbered(self._ignore)
         found = Joined(
             (
-                GeneralSheet(pages[0], book),
-                DefenseSheet(pages[1], book),
+                GeneralSheet(pages[0], book, numbers),
+                DefenseSheet(pages[1], book, numbers),
             )
-        ).find(Spelling(number).number(), insurant)
+        ).find(number, insurant)
         if found.items() or found.problems():
             return found
         return Result((), ("в общем файле особых условий нет строк для этого полиса",))

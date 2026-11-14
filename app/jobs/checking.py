@@ -23,6 +23,7 @@ from app.domain.status import Review
 from app.domain.verdict import Ruling, Verdict
 from app.ingest.source import Source
 from app.jobs.building import Bench, Cell
+from app.jobs.conditioning import Found
 from app.jobs.database import Sessions
 from app.jobs.errors import MissingProfileError
 from app.jobs.folios import Folio, Taken
@@ -128,7 +129,7 @@ class Judge(Semantics, Protocol):
 class Judges(Protocol):
     """Source of the semantic judge for a job, asked only when a stage really needs it."""
 
-    def judge(self, job_id: int) -> Judge: ...
+    def judge(self, job_id: int, notes: tuple[str, ...]) -> Judge: ...
 
 
 @final
@@ -137,7 +138,7 @@ class Postponing:
 
     __slots__ = ()
 
-    def judge(self, _job_id: int) -> Judge:
+    def judge(self, _job_id: int, _notes: tuple[str, ...]) -> Judge:
         return Postponed()
 
 
@@ -151,9 +152,9 @@ class Unconfigured:
     def __init__(self, primary: Judges) -> None:
         self._primary: Final = primary
 
-    def judge(self, job_id: int) -> Judge:
+    def judge(self, job_id: int, notes: tuple[str, ...]) -> Judge:
         try:
-            return self._primary.judge(job_id)
+            return self._primary.judge(job_id, notes)
         except MisconfiguredError:
             return Postponed()
 
@@ -337,14 +338,15 @@ class Tabled:
 @dataclass(frozen=True)
 class Docket:
     """Cells where the stages of a check leave the declaration, its policy, the judge that
-    recorded the questions, the verdicts and the profile the check was made by for the next
-    stage."""
+    recorded the questions, the verdicts, the profile the check was made by and the special
+    conditions found for the next stages."""
 
     declaration: Cell[Filed]
     policy: Cell[Policy]
     recording: Cell[Recording]
     verdicts: Cell[tuple[Verdict, ...]]
     taken: Cell[Taken]
+    conditions: Cell[Found]
 
 
 @final
@@ -464,7 +466,7 @@ class Judging:
 
     async def run(self, job: Snapshot) -> None:
         cardfile, results, judges = self._parts
-        semantics = judges.judge(job.id)
+        semantics = judges.judge(job.id, self._docket.conditions.get().notes())
         await results.prompts(job, semantics.version())
         batches = self._docket.recording.get().batches()
         if not batches:

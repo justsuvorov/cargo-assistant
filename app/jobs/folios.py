@@ -35,6 +35,7 @@ class Taken:
     version: int
     status: str
     problems: tuple[str, ...]
+    insurer: str = ""
 
 
 @final
@@ -165,6 +166,7 @@ class Folios:
             row.version,
             "approved" if row.status == "approved" else "draft",
             profile.problems,
+            profile.insurer,
         )
 
     def _version(self, row: PolicyProfile) -> Version:

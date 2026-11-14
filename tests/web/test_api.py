@@ -185,7 +185,7 @@ def test_reports_done_status_with_every_stage_timed_after_the_worker_ran(tmp_pat
             job["progress"],
             len(job["timings"]),
         ),
-        equal_to((True, True, "missing", "done", 100, 8)),
+        equal_to((True, True, "missing", "done", 100, 9)),
         "Worker does not carry the declaration through all stages without a profile",
     )
 

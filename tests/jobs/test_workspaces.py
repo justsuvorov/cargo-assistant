@@ -315,3 +315,51 @@ def test_journals_the_start_of_the_session_with_its_number_and_count(tmp_path: P
         equal_to(True),
         "Start does not write the number of the session and the count of declarations",
     )
+
+
+async def opens_with_chosen_conditions(tmp_path: Path) -> tuple[str, bool, list[str], bool]:
+    database, filing = await prepare(tmp_path)
+    owner = word()
+    number = await filing.open(
+        owner,
+        "A",
+        "Пример",
+        (*folder(), Blob("Особые условия/старое.txt", "Старое".encode())),
+        (Blob("новое.txt", "Новое".encode()),),
+    )
+    async with database.session() as session:
+        row = await session.get(Workspace, number)
+    await database.close()
+    assert row is not None
+    stored = DiskStorage(tmp_path / "files").exists(f"{owner}/{number}/conditions/новое.txt")
+    return row.client_file, row.client_chosen, row.client_lines, stored
+
+
+def test_chosen_conditions_file_replaces_the_one_of_the_folder_and_lies_under_the_session(
+    tmp_path: Path,
+) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(opens_with_chosen_conditions(tmp_path), 60)),
+        equal_to(("новое.txt", True, ["Новое"], True)),
+        "Chosen conditions file does not replace the folder one or does not lie under the session",
+    )
+
+
+async def opens_with_folder_conditions(tmp_path: Path) -> tuple[str, bool, list[str]]:
+    database, filing = await prepare(tmp_path)
+    number = await filing.open(
+        word(), "A", "Пример", (*folder(), Blob("Особые условия/старое.txt", "Старое".encode()))
+    )
+    async with database.session() as session:
+        row = await session.get(Workspace, number)
+    await database.close()
+    assert row is not None
+    return row.client_file, row.client_chosen, row.client_lines
+
+
+def test_takes_the_conditions_file_of_the_folder_when_none_is_chosen(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(opens_with_folder_conditions(tmp_path), 60)),
+        equal_to(("Особые условия/старое.txt", False, ["Старое"])),
+        "Conditions file of the folder is not taken when none is chosen",
+    )

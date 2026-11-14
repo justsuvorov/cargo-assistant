@@ -1,5 +1,5 @@
 {% set labels = {"queued": "В очереди", "waiting": "Ожидает сборки профиля полиса", "running": "Выполняется", "done": "Готово", "failed": "Ошибка"} %}
-{% set stages = {"ingest": "чтение", "fields": "разбор", "normalize": "разбор", "bind": "привязка", "profile": "профиль полиса", "check": "проверки", "semantic": "смысловые проверки", "report": "файл результата", "fetch": "загрузка файлов", "convert": "преобразование", "read": "чтение пакета", "extract": "извлечение пунктов", "save": "сохранение"} %}
+{% set stages = {"ingest": "чтение", "fields": "разбор", "normalize": "разбор", "bind": "привязка", "profile": "профиль полиса", "check": "проверки", "conditions": "особые условия", "semantic": "смысловые проверки", "report": "файл результата", "fetch": "загрузка файлов", "convert": "преобразование", "read": "чтение пакета", "extract": "извлечение пунктов", "save": "сохранение"} %}
 <span id="job-{{ job.id }}" class="job">
   <span class="status-{{ job.status }}">{{ labels[job.status] }}</span>
   <progress value="{{ job.progress }}" max="100"></progress>

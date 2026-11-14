@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     Date,
     DateTime,
     Float,
@@ -51,6 +52,10 @@ class Workspace(Base):
     name: Mapped[str] = mapped_column(String(255), default="")
     found: Mapped[list[str]] = mapped_column(JSON, default=list)
     package_sha: Mapped[str] = mapped_column(String(64), default="")
+    client_file: Mapped[str] = mapped_column(String(512), default="")
+    client_chosen: Mapped[bool] = mapped_column(Boolean, default=False)
+    client_lines: Mapped[list[str]] = mapped_column(JSON, default=list)
+    client_problems: Mapped[list[str]] = mapped_column(JSON, default=list)
     policy_id: Mapped[int | None] = mapped_column(ForeignKey("policies.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime)
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
@@ -139,6 +144,8 @@ class Declaration(Base):
     profile_status: Mapped[str] = mapped_column(String(16), default="")
     prompts_version: Mapped[str] = mapped_column(String(64), default="")
     model: Mapped[str] = mapped_column(String(128), default="")
+    conditions: Mapped[list[list[str]]] = mapped_column(JSON, default=list)
+    conditions_problems: Mapped[list[str]] = mapped_column(JSON, default=list)
 
 
 class CheckResult(Base):

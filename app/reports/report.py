@@ -25,6 +25,32 @@ _COLORS = {"match": "FFD6F0D6", "mismatch": "FFF0D6D6", "review": "FFFFF3CD"}
 _STATUS = 4
 
 
+class Terms(Protocol):
+    """Special conditions of a policy as rows of a sheet (condition, source, priority) and the
+    reasons why none were found."""
+
+    def rows(self) -> tuple[tuple[str, str, str], ...]: ...
+
+    def problems(self) -> tuple[str, ...]: ...
+
+
+@final
+class Stated:
+    """Terms that are already known."""
+
+    __slots__ = ("_problems", "_rows")
+
+    def __init__(self, rows: tuple[tuple[str, str, str], ...], problems: tuple[str, ...]) -> None:
+        self._rows: Final = rows
+        self._problems: Final = problems
+
+    def rows(self) -> tuple[tuple[str, str, str], ...]:
+        return self._rows
+
+    def problems(self) -> tuple[str, ...]:
+        return self._problems
+
+
 class Result(Protocol):
     """Result file of the check of one declaration, in the layout of the answer form."""
 
@@ -37,17 +63,21 @@ class Result(Protocol):
 class Report:
     """Result workbook: a row per shipment and per card of the declaration form, in the
     order of the cards, coloured by status, and a second sheet with the special conditions
-    of the policy.
+    of the policy: condition, source and priority, or, when none were found, one row with the
+    reasons, so that «no conditions» never looks like «checked».
 
     Every card must give exactly one verdict per shipment, otherwise the report fails.
     """
 
-    __slots__ = ("_cards", "_declaration", "_policy")
+    __slots__ = ("_cards", "_declaration", "_policy", "_terms")
 
-    def __init__(self, declaration: Declaration, policy: Policy, cards: tuple[Card, ...]) -> None:
+    def __init__(
+        self, declaration: Declaration, policy: Policy, cards: tuple[Card, ...], terms: Terms
+    ) -> None:
         self._declaration: Final = declaration
         self._policy: Final = policy
         self._cards: Final = cards
+        self._terms: Final = terms
 
     def name(self) -> str:
         number = re.sub(r'[\\/:*?"<>|]', "_", self._declaration.number())
@@ -57,12 +87,30 @@ class Report:
         book = Workbook()
         book.remove(book.worksheets[0])
         self._result(book.create_sheet("Результат проверки"))
-        conditions: Worksheet = book.create_sheet("Особые условия")
-        conditions.append(("Особые условия",))
-        for condition in self._policy.conditions():
-            conditions.append((condition,))
-        conditions.column_dimensions["A"].width = 120
+        self._conditions(book.create_sheet("Особые условия"))
         book.save(path)
+
+    def _conditions(self, sheet: Worksheet) -> None:
+        sheet.append(("Условие", "Источник", "Приоритет"))
+        for cell in sheet[1]:
+            cell.font = Font(bold=True)
+        rows = self._terms.rows()
+        for row in rows or (
+            (
+                "Особые условия не найдены: " + "; ".join(self._terms.problems())
+                if self._terms.problems()
+                else "Особые условия не найдены",
+                "",
+                "",
+            ),
+        ):
+            sheet.append(row)
+        for index, width in enumerate((100, 50, 25)):
+            sheet.column_dimensions["ABC"[index]].width = width
+        for line in sheet.iter_rows():
+            for cell in line:
+                cell.alignment = Alignment(wrap_text=True, vertical="top")
+        sheet.freeze_panes = "A2"
 
     def _result(self, sheet: Worksheet) -> None:
         sheet.append(_HEADER)

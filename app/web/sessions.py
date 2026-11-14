@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Annotated
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -12,7 +12,7 @@ from app.auth.identity import Identity
 from app.jobs.errors import ChoiceError, MissingWorkspaceError
 from app.jobs.models import Declaration, Job, Workspace
 from app.storage.archive import Blob, Zipped
-from app.web.folders import opened
+from app.web.folders import chosen, opened
 from app.web.overviews import overview
 from app.web.security import identity, services, workspace_of
 
@@ -85,10 +85,15 @@ async def blank(request: Request, _who: Annotated[Identity, Depends(identity)]) 
 
 @router.post("/sessions")
 async def open_folder(
-    request: Request, files: list[UploadFile], who: Annotated[Identity, Depends(identity)]
+    request: Request,
+    files: list[UploadFile],
+    who: Annotated[Identity, Depends(identity)],
+    conditions: Annotated[list[UploadFile] | None, File()] = None,
 ) -> RedirectResponse:
     name, found = await opened(files)
-    number = await services(request).workspaces.open(who.id(), who.name(), name, found)
+    number = await services(request).workspaces.open(
+        who.id(), who.name(), name, found, await chosen(conditions)
+    )
     return RedirectResponse(f"/sessions/{number}", status_code=303)
 
 

@@ -21,6 +21,8 @@ from app.jobs.stages import Benches, Building, Kit, Routed, Standard
 from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
 from app.llm.assembly import Configured
+from app.policy.conditions import SharedFile
+from app.rules.schema.card import spec
 from app.storage.disk import DiskStorage
 
 
@@ -60,6 +62,9 @@ async def run() -> None:
                 stamp,
                 Unconfigured(Benches(gateway, journal, 1, environment.semantic_pack_size)),
                 ThreadPoolExecutor(settings.threads(), thread_name_prefix="semantic"),
+                SharedFile(
+                    settings.conditions(), spec(settings.cards() / "policy.yaml").params.ignore
+                ),
             ),
         ),
         Building(

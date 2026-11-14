@@ -93,6 +93,7 @@ class Reporting:
                 Settled(card, verdicts)
                 for card in self._cardfile.reconciliation(Postponed()).cards(declaration.form())
             ),
+            self._docket.conditions.get(),
         )
         data = await asyncio.to_thread(self._saved, report, Footnote(self._docket.taken.get()))
         _, storage, layout = self._files
