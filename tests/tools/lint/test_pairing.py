@@ -32,3 +32,19 @@ def test_pairing_rejects_orphan_test() -> None:
         has_length(1),
         "Pairing does not reject a test without a module",
     )
+
+
+def test_pairing_skips_deployment_tests() -> None:
+    assert_that(
+        Pairing(frozenset()).violations(Code("tests/deploy/test_manifests.py", "")),
+        empty(),
+        "Pairing does not skip tests of release files",
+    )
+
+
+def test_pairing_rejects_orphan_test_outside_deployment_folder() -> None:
+    assert_that(
+        Pairing(frozenset()).violations(Code("tests/core/test_manifests.py", "")),
+        has_length(1),
+        "Pairing does not reject an orphan test outside the deployment folder",
+    )
