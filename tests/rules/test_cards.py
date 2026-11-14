@@ -546,7 +546,13 @@ def _unbound(form: str, reason: str) -> dict[str, tuple[tuple[str, str], ...]]:
 
 
 def test_card_with_a_policy_clause_never_matches_a_declaration_bound_to_no_policy() -> None:
-    reasons = ("policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous")
+    reasons = (
+        "policy_missing",
+        "policy_unreadable",
+        "policy_unknown",
+        "policy_ambiguous",
+        "policy_profile",
+    )
     asking = {form: _asking(form) for form in ("vertical", "psg")}
     matched = tuple(
         (form, reason, field)

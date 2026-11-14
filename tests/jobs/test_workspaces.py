@@ -35,10 +35,10 @@ class Recording:
         self.lines.append(f"{message}, job_id={job_id}, declaration_id={declaration_id}")
 
     def warning(self, message: str, job_id: int, declaration_id: int) -> None:
-        self.lines.append(message)
+        self.lines.append(f"{message}, job_id={job_id}, declaration_id={declaration_id}")
 
     def error(self, message: str, job_id: int, declaration_id: int) -> None:
-        self.lines.append(message)
+        self.lines.append(f"{message}, job_id={job_id}, declaration_id={declaration_id}")
 
 
 def word() -> str:

@@ -87,11 +87,12 @@ def test_tells_a_file_moved_from_policy_to_addenda_by_signature(tmp_path: Path) 
     )
 
 
-def declaration(path: Path) -> None:
-    def put_cells(sheet: Worksheet, row: int, cells: dict[int, str]) -> None:
-        for column, value in cells.items():
-            sheet.cell(row=row, column=column + 1, value=value)
+def put_cells(sheet: Worksheet, row: int, cells: dict[int, str]) -> None:
+    for column, value in cells.items():
+        sheet.cell(row=row, column=column + 1, value=value)
 
+
+def declaration(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     book = Workbook()
     sheet = book.create_sheet("Декларация")
@@ -104,7 +105,9 @@ def declaration(path: Path) -> None:
     put_cells(sheet, 21, {1: "5.", 2: "Транспорт", 6: "Авто"})
     put_cells(sheet, 22, {1: "6.", 2: "Пункт отправления", 6: "г. Первый"})
     put_cells(sheet, 24, {1: "8.", 2: "Пункт назначения", 6: "г. Второй"})
-    put_cells(sheet, 25, {1: "9.", 2: "Период страхования", 6: "01.09.2026", 7: "по", 8: "30.12.2026"})
+    put_cells(
+        sheet, 25, {1: "9.", 2: "Период страхования", 6: "01.09.2026", 7: "по", 8: "30.12.2026"}
+    )
     book.save(path)
 
 
