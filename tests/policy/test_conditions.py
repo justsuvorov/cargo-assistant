@@ -34,7 +34,7 @@ _GP = [
 ]
 _DEFENSE = [
     ["Страхователь", "Договор", "Перестрахование, при условии:", "Форма работы"],
-    ["ООО «Оборона-1»", "55-DD", "сумма больше лимита", "по согласованию"],
+    ["ООО «Оборона-1»", "55 DD", "сумма больше лимита", "по согласованию"],
 ]
 
 
@@ -61,7 +61,7 @@ def test_finds_defense_row_by_contract_or_insurant(tmp_path: Path) -> None:
     assert_that(
         (
             shared.find("55 dd", "").items()[0].text(),
-            shared.find("", "оао оборона-1").items()[0].text(),
+            shared.find("", "ооо оборона-1").items()[0].text(),
             shared.find("00", "Другой").items(),
         ),
         equal_to(
