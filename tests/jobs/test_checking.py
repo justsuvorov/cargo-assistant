@@ -503,7 +503,7 @@ def test_asks_a_person_with_the_reason_profile_for_a_policy_without_a_profile(
     assert_that(
         asyncio.run(asyncio.wait_for(unbound_reasons(tmp_path), 120)),
         equal_to(("policy.profile",)),
-        "Declaration of a policy without a profile does not get the reason profile in cards with a policy clause",
+        "Card with a policy clause does not give the reason profile when the profile is missing",
     )
 
 

@@ -38,4 +38,4 @@ def test_answers_health_check_without_token(tmp_path: Path) -> None:
 def test_does_not_keep_the_old_pages_of_upload_and_archive(tmp_path: Path) -> None:
     with TestClient(create_app(settings(tmp_path))) as client:
         codes = [client.get(path).status_code for path in ("/reconcile", "/archive")]
-    assert_that(codes, equal_to([404, 404]), "Old pages of the upload are still served")
+    assert_that(codes, equal_to([404, 404]), "Old pages of the upload are not removed")

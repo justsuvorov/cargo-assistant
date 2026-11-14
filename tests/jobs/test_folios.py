@@ -11,7 +11,6 @@ from app.jobs.database import Database
 from app.jobs.errors import MissingProfileError, NotReadyError
 from app.jobs.folios import Folios
 from app.jobs.models import Base, Policy
-from app.jobs.queue import Queue
 from app.policy.schema.profile import Profile
 
 
@@ -29,18 +28,18 @@ def profile(number: str = "", issued: date = date.min, insurer: str = "") -> Pro
     return Profile(number=number, issued=issued, insurer=insurer, clauses={})
 
 
-async def prepare(path: Path) -> tuple[Database, Queue, int]:
+async def prepare(path: Path) -> tuple[Database, int]:
     database = Database(f"sqlite+aiosqlite:///{path / 'f.db'}")
     async with database.session() as session:
         connection = await session.connection()
         await connection.run_sync(Base.metadata.create_all)
         session.add(Policy(owner="u", package_sha="s", number="", insured=""))
         await session.commit()
-    return database, Queue(database, Utc()), 1
+    return database, 1
 
 
 async def numbers_drafts_one_after_another(tmp_path: Path) -> int:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     await folio.draft(policy, profile())
     await folio.draft(policy, profile("A"))
@@ -58,7 +57,7 @@ def test_numbers_drafts_one_after_another(tmp_path: Path) -> None:
 
 
 async def refuses_profile_without_issue_date(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date.min, "B"))
     try:
@@ -79,7 +78,7 @@ def test_refuses_profile_without_issue_date(tmp_path: Path) -> None:
 
 
 async def refuses_profile_without_number_and_insurer(tmp_path: Path) -> str:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     await folio.draft(policy, profile("", date(2025, 1, 1), " "))
     try:
@@ -100,7 +99,7 @@ def test_refuses_profile_without_number_and_insurer(tmp_path: Path) -> None:
 
 
 async def approves_and_remembers_who_and_when(tmp_path: Path) -> tuple[str, str, datetime | None]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     moment = datetime(2026, 5, 4, 12, 0)
     folio = Folios(database, Fixed(moment))
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
@@ -119,7 +118,7 @@ def test_approves_and_remembers_who_and_when(tmp_path: Path) -> None:
 
 
 async def refuses_approval_of_outdated_version(tmp_path: Path) -> bool:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
     await folio.draft(policy, profile("A2", date(2025, 1, 1), "B"))
@@ -141,7 +140,7 @@ def test_refuses_approval_of_outdated_version(tmp_path: Path) -> None:
 
 
 async def takes_draft_while_nobody_approved_a_version(tmp_path: Path) -> tuple[str, int]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     await folio.draft(policy, profile("A", date(2025, 1, 1), "B"))
     taken = await folio.taken(policy)
@@ -158,7 +157,7 @@ def test_takes_draft_while_nobody_approved_a_version(tmp_path: Path) -> None:
 
 
 async def answers_from_approved_version_after_new_draft(tmp_path: Path) -> tuple[bool, str, int]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     number = uuid.uuid4().hex
     await folio.draft(policy, profile(number, date(2025, 1, 1), "B"))
@@ -178,7 +177,7 @@ def test_answers_from_approved_version_after_new_draft(tmp_path: Path) -> None:
 
 
 async def takes_problems_of_the_package_with_the_profile(tmp_path: Path) -> tuple[bool]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     folio = Folios(database, Utc())
     problem = f"Файл {uuid.uuid4().hex} не читается"
     await folio.draft(
@@ -199,7 +198,7 @@ def test_takes_problems_of_the_package_with_the_profile(tmp_path: Path) -> None:
 
 
 async def takes_nothing_from_policy_without_profile(tmp_path: Path) -> bool:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     try:
         await Folios(database, Utc()).taken(policy)
     except MissingProfileError:
@@ -218,7 +217,7 @@ def test_takes_nothing_from_policy_without_profile(tmp_path: Path) -> None:
 
 
 async def fills_requisites(tmp_path: Path) -> tuple[str, str]:
-    database, queue, policy = await prepare(tmp_path)
+    database, policy = await prepare(tmp_path)
     number = f"N{random.randint(1, 999)}"
     await Folios(database, Utc()).draft(policy, profile(number, insurer="Икс"))
     async with database.session() as session:
@@ -237,7 +236,7 @@ def test_fills_policy_requisites_from_draft(tmp_path: Path) -> None:
 
 
 async def drafts_unknown_policy(tmp_path: Path) -> None:
-    database, queue, _ = await prepare(tmp_path)
+    database, _ = await prepare(tmp_path)
     try:
         await Folios(database, Utc()).draft(99, profile())
     finally:

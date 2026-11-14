@@ -226,13 +226,15 @@ def test_lists_declarations_of_the_folder_but_not_the_policy_and_the_addenda(
 def test_refuses_to_open_nothing(tmp_path: Path) -> None:
     with TestClient(create_app(settings(tmp_path))) as client:
         response = client.post("/sessions", files=[])
-    assert_that(response.status_code >= 400, equal_to(True), "Empty choice of files is accepted")
+    assert_that(response.status_code >= 400, equal_to(True), "Empty choice of files is not refused")
 
 
 def test_refuses_a_folder_with_a_path_leading_out(tmp_path: Path) -> None:
     with TestClient(create_app(settings(tmp_path))) as client:
         response = client.post("/sessions", files=[("files", ("a/../../x.xlsx", b"x"))])
-    assert_that(response.status_code, equal_to(400), "Path leading out of the folder is accepted")
+    assert_that(
+        response.status_code, equal_to(400), "Path leading out of the folder is not refused"
+    )
 
 
 def test_opens_a_folder_packed_into_a_zip(tmp_path: Path) -> None:
@@ -265,7 +267,7 @@ def test_refuses_a_file_that_is_not_a_declaration_of_the_folder(tmp_path: Path) 
     with TestClient(create_app(settings(tmp_path))) as client:
         client.post("/sessions", files=folder(number()))
         response = client.post("/sessions/1/start", data={"declaration": ["ГП.docx"]})
-    assert_that(response.status_code, equal_to(409), "Policy file is started as a declaration")
+    assert_that(response.status_code, equal_to(409), "Policy file is not refused as a declaration")
 
 
 def test_shows_the_started_declarations_with_their_state(tmp_path: Path) -> None:
@@ -366,7 +368,7 @@ def test_takes_the_profile_of_the_first_session_for_the_same_files(tmp_path: Pat
     assert_that(
         (model.count() - calls, "Готово 1 из 1" in page, "черновику" in page),
         equal_to((0, True, True)),
-        "Second session of the same files builds the profile again",
+        "Second session of the same files does not take the profile of the first",
     )
 
 
@@ -382,7 +384,7 @@ def test_lists_only_sessions_of_the_user(tmp_path: Path) -> None:
     assert_that(
         ('href="/sessions/1"' in mine, 'href="/sessions/1"' in hers),
         equal_to((False, True)),
-        "List of sessions shows a session of another user",
+        "List of sessions does not hide a session of another user",
     )
 
 
@@ -413,7 +415,7 @@ def test_keeps_the_session_of_another_user_unstarted(tmp_path: Path) -> None:
     assert_that(
         'action="/sessions/1/start"' in html,
         equal_to(True),
-        "Another user starts the session of the owner",
+        "Session of the owner is not safe from a start by another user",
     )
 
 
@@ -444,4 +446,6 @@ def test_answers_not_found_for_the_archive_of_a_session_without_results(tmp_path
     with TestClient(create_app(settings(tmp_path))) as client:
         started(client, (_FIRST,), folder(number()))
         response = client.get("/sessions/1/archive")
-    assert_that(response.status_code, equal_to(404), "Archive without results is offered")
+    assert_that(
+        response.status_code, equal_to(404), "Archive without results is not reported as missing"
+    )

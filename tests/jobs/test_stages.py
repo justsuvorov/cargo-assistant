@@ -17,7 +17,7 @@ from app.jobs.database import Database
 from app.jobs.errors import WaitingError
 from app.jobs.folios import Folios
 from app.jobs.models import Base, Declaration, Job, Policy
-from app.jobs.queue import Queue, Snapshot
+from app.jobs.queue import Snapshot
 from app.jobs.stages import Benches, Kit, Profiled, Routed, Standard, UnknownKindError
 from app.jobs.versions import Stamp
 from app.llm.errors import MisconfiguredError
@@ -106,7 +106,7 @@ def test_passes_with_a_draft_profile_without_waiting_for_an_expert(tmp_path: Pat
             asyncio.wait_for(passes(tmp_path, bound=True, build="done", profile="draft"), 30)
         ),
         equal_to("passed"),
-        "Declaration of a policy with a draft profile is held back",
+        "Declaration of a policy with a draft profile does not go on without an expert",
     )
 
 
@@ -124,7 +124,7 @@ def test_passes_without_a_profile_when_the_build_failed(tmp_path: Path) -> None:
     assert_that(
         asyncio.run(asyncio.wait_for(passes(tmp_path, bound=True, build="failed", profile=""), 30)),
         equal_to("passed"),
-        "Declaration is held back although the build of its profile failed",
+        "Declaration does not go on after the build of its profile failed",
     )
 
 

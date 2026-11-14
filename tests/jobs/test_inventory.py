@@ -47,7 +47,7 @@ def test_ignores_declarations_when_signing_the_policy_files(tmp_path: Path) -> N
     assert_that(
         Inventory(tmp_path).signature(),
         equal_to(before),
-        "A declaration changes the signature of the policy files",
+        "A declaration does not leave the signature of the policy files unchanged",
     )
 
 
@@ -71,7 +71,7 @@ def test_keeps_signature_for_the_same_files_in_another_folder(tmp_path: Path) ->
     assert_that(
         Inventory(tmp_path / "one").signature(),
         equal_to(Inventory(tmp_path / "two" / "other").signature()),
-        "Signature depends on the place of the folder",
+        "Signature of the same files does not stay the same in another folder",
     )
 
 

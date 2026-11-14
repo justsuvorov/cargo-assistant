@@ -32,7 +32,7 @@ def test_does_not_find_another_number() -> None:
     assert_that(
         Numbered(()).same(f"{digits()}1", f"{digits()}2"),
         equal_to(False),
-        "Different numbers are taken for the same one",
+        "Different numbers are not told apart",
     )
 
 
@@ -49,7 +49,7 @@ def test_does_not_find_blank_number() -> None:
     assert_that(
         Numbered(("№",)).same(digits(), " № "),
         equal_to(False),
-        "Blank number is found in a text",
+        "Blank number is not refused",
     )
 
 

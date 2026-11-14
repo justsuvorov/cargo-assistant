@@ -305,5 +305,5 @@ def test_keeps_waiting_job_while_the_profile_is_being_built(tmp_path: Path) -> N
             asyncio.wait_for(resumed_job_of_policy(tmp_path, profile=False, build="running"), 30)
         ),
         equal_to("waiting"),
-        "Job is resumed while its profile is still being built",
+        "Job does not keep waiting while its profile is still being built",
     )

@@ -215,7 +215,7 @@ def test_lists_only_sessions_of_the_user_through_the_api(tmp_path: Path) -> None
     assert_that(
         (mine, [item["id"] for item in hers]),
         equal_to(([], [1])),
-        "List of sessions through the API shows a session of another user",
+        "List of sessions through the API does not hide a session of another user",
     )
 
 
@@ -235,7 +235,7 @@ def test_hides_the_session_of_another_user_in_every_call_of_the_api(tmp_path: Pa
     assert_that(
         codes,
         equal_to([404, 404, 404, 404]),
-        "Session or job of another user is visible through the API",
+        "Session or job of another user is not hidden through the API",
     )
 
 

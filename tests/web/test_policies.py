@@ -265,7 +265,7 @@ def test_does_not_offer_to_upload_a_package_outside_a_session(tmp_path: Path) ->
     assert_that(
         ("Загрузить пакет" in html, response.status_code in {404, 405}),
         equal_to((False, True)),
-        "Package can still be uploaded outside a session",
+        "Package can be uploaded outside a session, which is not allowed",
     )
 
 
