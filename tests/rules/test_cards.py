@@ -547,15 +547,16 @@ def _unbound(form: str, reason: str) -> dict[str, tuple[tuple[str, str], ...]]:
 
 def test_card_with_a_policy_clause_never_matches_a_declaration_bound_to_no_policy() -> None:
     reasons = ("policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous")
+    asking = {form: _asking(form) for form in ("vertical", "psg")}
     matched = tuple(
         (form, reason, field)
         for form in ("vertical", "psg")
         for reason in reasons
         for field, found in _unbound(form, reason).items()
-        if field in _asking(form) and any(status == "match" for status, _ in found)
+        if field in asking[form] and any(status == "match" for status, _ in found)
     )
     assert_that(
-        (bool(_asking("vertical")), bool(_asking("psg")), matched),
+        (bool(asking["vertical"]), bool(asking["psg"]), matched),
         equal_to((True, True, ())),
         "Card that asks a policy clause matches a declaration bound to no policy",
     )
@@ -564,8 +565,9 @@ def test_card_with_a_policy_clause_never_matches_a_declaration_bound_to_no_polic
 def test_card_with_a_policy_clause_names_the_binding_for_a_declaration_bound_to_no_policy() -> None:
     reason = random.choice(("missing", "unreadable", "unknown", "ambiguous"))
     found = _unbound("vertical", f"policy_{reason}")
+    asking = _asking("vertical")
     assert_that(
-        {found[field] for field in _asking("vertical")},
+        {found[field] for field in asking},
         equal_to({(("review", f"policy.{reason}"),)}),
         "Card that asks a policy clause does not name the binding of an unbound declaration",
     )
@@ -575,6 +577,7 @@ def test_card_without_a_policy_clause_works_as_before_for_a_declaration_bound_to
     None
 ):
     unbound = _unbound("vertical", "policy_unknown")
+    asking = _asking("vertical")
     assert_that(
         {
             card.field(): tuple(
@@ -582,11 +585,9 @@ def test_card_without_a_policy_clause_works_as_before_for_a_declaration_bound_to
                 for verdict in card.verdicts(_full("vertical"), Vacant("1"))
             )
             for card in Cards(_folder(), Mute()).cards("vertical")
-            if card.field() not in _asking("vertical")
+            if card.field() not in asking
         },
-        equal_to(
-            {field: found for field, found in unbound.items() if field not in _asking("vertical")}
-        ),
+        equal_to({field: found for field, found in unbound.items() if field not in asking}),
         "Card without a policy clause does not work as before for an unbound declaration",
     )
 
