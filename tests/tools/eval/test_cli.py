@@ -322,7 +322,7 @@ def test_run_leaves_carrier_out_of_default_standalone_fields(tmp_path: Path) -> 
             "Поля: beneficiary, document, document_date, document_number, other, packaging, "
             "sealing, transshipment."
         ),
-        "Run still scores carrier as a field decided without a policy",
+        "Run does not leave carrier out of the fields decided without a policy",
     )
 
 
