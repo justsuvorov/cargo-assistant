@@ -61,8 +61,7 @@ def _rules(folder: Path) -> Path:
         'comments: {match: "Заполнено", mismatch: "Пусто", review: "Проверить", '
         'policy_missing: "Нет номера", policy_unreadable: "Номер не распознан", '
         'policy_unknown: "Полис не найден", policy_ambiguous: "Полисов несколько", '
-        'policy_profile: "Профиль не собран"}
-'
+        'policy_profile: "Профиль не собран"}\n'
     )
     (folder / "cargo.yaml").write_text(
         "field: cargo\nforms:\n  psg: {order: 5, title: Наименование груза}\n"
