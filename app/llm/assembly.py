@@ -1,8 +1,4 @@
-import ssl
-import threading
 from typing import Final, Protocol, final
-
-import httpx
 
 from app.core.journal import Journal
 from app.core.schema.environment import Environment
@@ -21,6 +17,7 @@ from app.llm.deadline import Cadence, Rhythm
 from app.llm.errors import MisconfiguredError
 from app.llm.ledger import Ledger, Origin, Route
 from app.llm.model import Model, Strict, Throttled
+from app.llm.pool import Pool, Shared, Verified
 from app.llm.probe import Inventory, Listing, Probe, Survey, Unlisted
 from app.llm.provider import Backend, Insistent
 from app.llm.wire import Bearer, Keyed, Patient
@@ -40,13 +37,15 @@ class Configured:
     semaphore of the process, so a process builds exactly one assembly. External providers are
     refused unless LLM_ALLOW_EXTERNAL is true, because client data must stay in the VSK contour."""
 
-    __slots__ = ("_environment", "_gate", "_journal", "_ledger")
+    __slots__ = ("_environment", "_journal", "_ledger", "_pool")
 
     def __init__(self, environment: Environment, journal: Journal, ledger: Ledger) -> None:
         self._environment: Final = environment
         self._journal: Final = journal
         self._ledger: Final = ledger
-        self._gate: Final = threading.BoundedSemaphore(environment.llm_max_concurrency)
+        self._pool: Final[Pool] = Shared(
+            Verified(environment, journal), environment.llm_max_concurrency
+        )
 
     def model(self) -> Model:
         return Throttled(
@@ -69,7 +68,7 @@ class Configured:
                 self._ledger,
                 self._environment.llm_total_timeout,
             ),
-            self._gate,
+            self._pool.gate(),
         )
 
     def probe(self, parallel: int) -> Survey:
@@ -99,7 +98,7 @@ class Configured:
             )
         endpoint = Patient(
             Bearer(
-                self._client(),
+                self._pool.client(),
                 self._required(self._environment.llm_api_url, "LLM_API_URL"),
                 self._required(self._environment.llm_api_key.get_secret_value(), "LLM_API_KEY"),
             ),
@@ -125,7 +124,7 @@ class Configured:
             "output_config": Claude(
                 Patient(
                     Keyed(
-                        self._client(),
+                        self._pool.client(),
                         self._environment.anthropic_api_url,
                         self._required(
                             self._environment.anthropic_api_key.get_secret_value(),
@@ -150,7 +149,7 @@ class Configured:
             "json_schema": Chat(
                 Patient(
                     Bearer(
-                        self._client(),
+                        self._pool.client(),
                         self._environment.gemini_api_url,
                         self._required(
                             self._environment.gemini_api_key.get_secret_value(), "GEMINI_API_KEY"
@@ -189,28 +188,6 @@ class Configured:
             )
         return value
 
-    def _client(self) -> httpx.Client:
-        return httpx.Client(verify=self._verify())
-
-    def _verify(self) -> ssl.SSLContext | bool:
-        if not self._environment.llm_verify_tls:
-            self._journal.warning(
-                "Проверка TLS-сертификата модели отключена настройкой LLM_VERIFY_TLS",
-                0,
-                0,
-            )
-            return False
-        context = ssl.create_default_context()
-        if self._environment.llm_ca_bundle:
-            try:
-                context.load_verify_locations(self._environment.llm_ca_bundle)
-            except OSError as error:
-                raise MisconfiguredError(
-                    f"Не удалось прочитать сертификат LLM_CA_BUNDLE="
-                    f"{self._environment.llm_ca_bundle}: {error}"
-                ) from error
-        return context
-
     def _origin(self) -> Origin:
         return Route(
             self._environment.llm_provider,
@@ -230,7 +207,7 @@ class Configured:
             return Unlisted()
         url, key = address[self._environment.llm_provider]
         return Listing(
-            self._client(),
+            self._pool.client(),
             url.removesuffix("/").removesuffix("/chat/completions") + "/models",
             key.get_secret_value(),
         )

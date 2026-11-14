@@ -297,6 +297,35 @@ def test_run_scores_fields_decided_without_policy_apart(tmp_path: Path) -> None:
     )
 
 
+def test_run_leaves_carrier_out_of_default_standalone_fields(tmp_path: Path) -> None:
+    _declaration(tmp_path / "real" / "35" / "35.xlsx", 35, "0000T00GR0000", 1)
+    main(
+        [
+            "run",
+            "--gold",
+            str(_gold(tmp_path / "gold", "35,35,carrier,match,sure\n")),
+            "--manifest",
+            str(_manifest(tmp_path / "manifest.yaml", {"35": "dev"})),
+            "--pipeline",
+            "checked",
+            "--real",
+            str(tmp_path / "real"),
+            "--cards",
+            str(_rules(tmp_path / "cards")),
+            "--out",
+            str(tmp_path / "report.md"),
+        ]
+    )
+    assert_that(
+        (tmp_path / "report.md").read_text(encoding="utf-8"),
+        contains_string(
+            "Поля: beneficiary, document, document_date, document_number, other, packaging, "
+            "sealing, transshipment."
+        ),
+        "Run does not leave carrier out of the fields decided without a policy",
+    )
+
+
 def test_template_writes_marking_file_named_by_declaration(tmp_path: Path) -> None:
     number = random.randint(100, 999)
     _declaration(tmp_path / "d.xlsx", number, "0000T00GR0000", 2)

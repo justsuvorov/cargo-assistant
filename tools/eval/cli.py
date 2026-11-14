@@ -64,7 +64,7 @@ def _parser() -> argparse.ArgumentParser:
     run.add_argument(
         "--standalone",
         default="packaging,sealing,other,beneficiary,document,document_date,document_number,"
-        "transshipment,carrier",
+        "transshipment",
         help="поля через запятую, которые без профиля полиса решаются сами; их точность — отдельно",
     )
     run.add_argument("--out", type=Path, default=Path("-"))
