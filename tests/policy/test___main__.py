@@ -27,7 +27,9 @@ def test_writes_draft_profile_into_the_given_file(tmp_path: Path) -> None:
     build(tmp_path / "p", model, tmp_path / "out.json", io.StringIO())
     assert_that(
         sorted(json.loads((tmp_path / "out.json").read_text(encoding="utf-8"))),
-        equal_to(["clauses", "conditions", "insurer", "issued", "number", "problems"]),
+        equal_to(
+            ["clauses", "conditions", "insurer", "issued", "number", "problems", "schema_version"]
+        ),
         "Command does not write the draft profile into the file",
     )
 
