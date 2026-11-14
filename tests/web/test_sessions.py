@@ -496,4 +496,4 @@ def test_accepts_a_folder_within_the_limit(tmp_path: Path) -> None:
         create_app(settings(tmp_path, "FOLDER_MAX_MB=5\n")), follow_redirects=False
     ) as client:
         response = client.post("/sessions", files=folder(number()))
-    assert_that(response.status_code, equal_to(303), "Folder within the limit is refused")
+    assert_that(response.status_code, equal_to(303), "Folder within the limit is not accepted")

@@ -284,13 +284,14 @@ def test_gives_drafts_saved_at_once_different_versions_without_losing_any_on_pos
     asyncio.run(administer(base, f"CREATE DATABASE {name}"))
     try:
         url = make_url(base).set(database=name).render_as_string(False)
-        assert_that(
-            asyncio.run(asyncio.wait_for(drafts_at_once(url, 4), 60)),
-            equal_to([1, 2, 3, 4]),
-            "Drafts saved at once get equal versions or some of them are lost",
-        )
+        found = asyncio.run(asyncio.wait_for(drafts_at_once(url, 4), 60))
     finally:
         asyncio.run(administer(base, f"DROP DATABASE IF EXISTS {name} WITH (FORCE)"))
+    assert_that(
+        found,
+        equal_to([1, 2, 3, 4]),
+        "Drafts saved at once do not get different versions or some of them are lost",
+    )
 
 
 def test_gives_drafts_saved_at_once_different_versions_on_sqlite(tmp_path: Path) -> None:
@@ -299,7 +300,7 @@ def test_gives_drafts_saved_at_once_different_versions_on_sqlite(tmp_path: Path)
             asyncio.wait_for(drafts_at_once(f"sqlite+aiosqlite:///{tmp_path / 'r.db'}", 4), 60)
         ),
         equal_to([1, 2, 3, 4]),
-        "Drafts saved at once on sqlite get equal versions or some of them are lost",
+        "Drafts saved at once on sqlite do not get different versions or some are lost",
     )
 
 
@@ -320,5 +321,5 @@ def test_refuses_two_profiles_of_a_policy_with_one_version(tmp_path: Path) -> No
     assert_that(
         asyncio.run(asyncio.wait_for(refuses_equal_versions(tmp_path), 30)),
         equal_to(True),
-        "Two profiles of one policy with the same version are accepted",
+        "Two profiles of one policy with the same version are not refused",
     )
