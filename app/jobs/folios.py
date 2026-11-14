@@ -3,6 +3,7 @@ from datetime import date, datetime
 from typing import Final, Protocol, final
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.core.clock import Clock
 from app.domain.policy import Policy as Reference
@@ -12,6 +13,8 @@ from app.jobs.models import Policy, PolicyProfile
 from app.jobs.schemas import Upgraded
 from app.policy.approved import Approved
 from app.policy.schema.profile import Profile
+
+_ATTEMPTS = 5
 
 
 @final
@@ -86,6 +89,14 @@ class Folios:
         self._clock: Final = clock
 
     async def draft(self, policy_id: int, profile: Profile) -> int:
+        for _ in range(_ATTEMPTS):
+            try:
+                return await self._saved(policy_id, profile)
+            except IntegrityError:
+                continue
+        raise NotReadyError(f"Не удалось сохранить версию профиля полиса {policy_id}, повторите")
+
+    async def _saved(self, policy_id: int, profile: Profile) -> int:
         async with self._sessions.session() as session:
             policy = await session.get(Policy, policy_id)
             if policy is None:

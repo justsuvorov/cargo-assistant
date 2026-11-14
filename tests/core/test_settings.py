@@ -135,3 +135,23 @@ def test_takes_local_user_from_environment(tmp_path: Path) -> None:
         equal_to(name),
         "Local user is not taken from the environment",
     )
+
+
+def test_limits_folder_to_two_hundred_megabytes_by_default(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    config = EnvSettings(Environment(str(tmp_path / ".env")))
+    assert_that(
+        (config.folder_limit(), config.conditions_limit()),
+        equal_to((200 * 1024 * 1024, 20 * 1024 * 1024)),
+        "Default limits of the folder and of the conditions file are not 200 and 20 megabytes",
+    )
+
+
+def test_takes_upload_limits_from_environment(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("FOLDER_MAX_MB=1\nCONDITIONS_MAX_MB=0.5\n", encoding="utf-8")
+    config = EnvSettings(Environment(str(tmp_path / ".env")))
+    assert_that(
+        (config.folder_limit(), config.conditions_limit()),
+        equal_to((1048576, 524288)),
+        "Upload limits are not taken from settings",
+    )

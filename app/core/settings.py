@@ -17,6 +17,10 @@ class Settings(Protocol):
 
     def cache_days(self) -> int: ...
 
+    def folder_limit(self) -> int: ...
+
+    def conditions_limit(self) -> int: ...
+
     def jobs(self) -> int: ...
 
     def attempts(self) -> int: ...
@@ -93,6 +97,12 @@ class EnvSettings:
 
     def cache_days(self) -> int:
         return self._environment.soffice_cache_days
+
+    def folder_limit(self) -> int:
+        return int(self._environment.folder_max_mb * 1024 * 1024)
+
+    def conditions_limit(self) -> int:
+        return int(self._environment.conditions_max_mb * 1024 * 1024)
 
     def jobs(self) -> int:
         return self._environment.worker_max_jobs

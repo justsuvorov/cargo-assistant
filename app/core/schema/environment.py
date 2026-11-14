@@ -1,4 +1,4 @@
-from pydantic import PositiveInt, SecretStr
+from pydantic import PositiveFloat, PositiveInt, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -59,6 +59,8 @@ class Environment(BaseSettings):
     session_hours: PositiveInt = 12
     app_base_url: str = ""
     special_conditions_path: str = ""
+    folder_max_mb: PositiveFloat = 200
+    conditions_max_mb: PositiveFloat = 20
     auth_disabled: bool = False
     auth_dev_mode: bool = False
     auth_dev_user_id: str = "dev-user"

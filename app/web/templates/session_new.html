@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Новая сессия</h1>
+{% if notice %}<div class="alert error" role="alert">{{ notice }}</div>{% endif %}
 <form method="post" action="/sessions" enctype="multipart/form-data">
   <p>Откройте папку полиса: генеральный полис лежит в самой папке (или в подпапке «ГП»), дополнительные соглашения — в папке «ДС»,
      особые условия клиента — в папке «Особые условия», декларации — в любых других подпапках, например «Декларации/Июнь».</p>

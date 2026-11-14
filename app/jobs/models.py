@@ -80,6 +80,7 @@ class PolicyProfile(Base):
     """Versioned profile of a policy extracted from its documents and approved by an expert."""
 
     __tablename__ = "policy_profiles"
+    __table_args__ = (UniqueConstraint("policy_id", "version", name="uq_profile_version"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     policy_id: Mapped[int] = mapped_column(ForeignKey("policies.id"), index=True)
