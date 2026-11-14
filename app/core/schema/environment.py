@@ -17,7 +17,7 @@ class Environment(BaseSettings):
     llm_api_key: SecretStr = SecretStr("")
     llm_model: str = ""
     llm_response_format: str = "prompt"
-    llm_max_tokens: int = 4096
+    llm_max_tokens: int = 16384
     llm_thinking_budget: int = 0
     llm_max_concurrency: PositiveInt = 4
     llm_timeout: float = 60.0
@@ -37,6 +37,7 @@ class Environment(BaseSettings):
     gemini_model: str = ""
     worker_max_jobs: int = 2
     semantic_threads: int = 0
+    semantic_pack_size: PositiveInt = 100
     worker_poll_interval: float = 1.0
     worker_job_timeout: float = 600.0
     worker_max_attempts: int = 3

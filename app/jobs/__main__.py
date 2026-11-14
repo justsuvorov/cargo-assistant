@@ -59,7 +59,7 @@ async def run() -> None:
                 settings.cards(),
                 DiskStorage(settings.storage()),
                 stamp,
-                Unconfigured(Benches(gateway, journal, 1, 40)),
+                Unconfigured(Benches(gateway, journal, 1, environment.semantic_pack_size)),
                 ThreadPoolExecutor(settings.threads(), thread_name_prefix="semantic"),
             ),
         ),

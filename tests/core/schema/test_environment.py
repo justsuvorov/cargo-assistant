@@ -111,3 +111,23 @@ def test_reads_switch_that_disables_login(tmp_path: Path) -> None:
         equal_to(True),
         "Switch that disables login is not read from the environment",
     )
+
+
+def test_defaults_pack_to_hundred_values_and_answer_to_16384_tokens(tmp_path: Path) -> None:
+    (tmp_path / ".env").write_text("", encoding="utf-8")
+    environment = Environment(str(tmp_path / ".env"))
+    assert_that(
+        (environment.semantic_pack_size, environment.llm_max_tokens),
+        equal_to((100, 16384)),
+        "Defaults of the pack size and the answer limit do not follow D-54",
+    )
+
+
+def test_reads_pack_size_from_environment_file(tmp_path: Path) -> None:
+    size = random.randint(5, 99)
+    (tmp_path / ".env").write_text(f"SEMANTIC_PACK_SIZE={size}\n", encoding="utf-8")
+    assert_that(
+        Environment(str(tmp_path / ".env")).semantic_pack_size,
+        equal_to(size),
+        "Pack size is not read from the environment",
+    )

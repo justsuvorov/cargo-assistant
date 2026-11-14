@@ -36,7 +36,7 @@ python -m tools.eval mask <исходный.txt> <обезличенный.txt> 
 
   `--standalone` — поля, которые без профиля полиса решаются сами; их точность выводится
   отдельным разделом в конце отчёта (по умолчанию packaging, sealing, other, beneficiary,
-  document, document_date, document_number, transshipment, carrier).
+  document, document_date, document_number, transshipment; carrier после T-32 без профиля — «требует проверки», поэтому из списка убран).
 - `template` — читает декларацию через `app.declarations` и пишет шаблон разметки для ФСЦ
   `<номер> – разметка.xlsx` (раздел 3 требований к эталону). Пример по вымышленной декларации —
   [example/](example/).
