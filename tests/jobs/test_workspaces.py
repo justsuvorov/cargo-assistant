@@ -311,7 +311,7 @@ async def journals_start(tmp_path: Path) -> tuple[list[str], int]:
 def test_journals_the_start_of_the_session_with_its_number_and_count(tmp_path: Path) -> None:
     lines, number = asyncio.run(asyncio.wait_for(journals_start(tmp_path), 60))
     assert_that(
-        f"Сессия {number}: запущено 2 деклараций, job_id=0, declaration_id=0" in lines,
+        f"Сессия {number}: запущено деклараций — 2, job_id=0, declaration_id=0" in lines,
         equal_to(True),
         "Start does not write the number of the session and the count of declarations",
     )

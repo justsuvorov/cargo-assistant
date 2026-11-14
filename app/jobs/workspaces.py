@@ -114,7 +114,7 @@ class Filing:
             ids = [await self._declared(session, row, path) for path in chosen]
             row.started_at = self._notes[0].now()
             await session.commit()
-            self._notes[1].info(f"Сессия {row.id}: запущено {len(ids)} деклараций", 0, 0)
+            self._notes[1].info(f"Сессия {row.id}: запущено деклараций — {len(ids)}", 0, 0)
             return tuple(ids)
 
     def _checked(self, row: Workspace, chosen: tuple[str, ...]) -> None:
