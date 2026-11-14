@@ -36,6 +36,7 @@ _BRANCHES = frozenset({*_GROUNDED, "filled", *_STATUSES})
 _FORMS = frozenset({"vertical", "psg"})
 _MIXED = ".mixed"
 _CASES = frozenset({"foreign", "fused", "latin", "unformed"})
+_BINDINGS = ("policy_missing", "policy_unreadable", "policy_unknown", "policy_ambiguous")
 
 
 class Form(BaseModel):
@@ -153,6 +154,13 @@ class Spec(BaseModel):
         broken = [text for text, failed in problems if failed]
         if broken:
             raise ValueError(broken[0])
+        return self
+
+    @model_validator(mode="after")
+    def _unbound(self) -> "Spec":
+        missing = [key for key in _BINDINGS if key not in self.comments]
+        if self.clause != "none" and missing:
+            raise ValueError(f"карточке с пунктом полиса нужны шаблоны comments {missing}")
         return self
 
     def covers(self, form: str) -> bool:

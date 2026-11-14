@@ -1,12 +1,16 @@
 import asyncio
+import contextvars
 from concurrent.futures import Executor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, Protocol, final
 
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from app.core.journal import Journal
+from app.domain.semantics import Question, Semantics
+from app.domain.verdict import Verdict
 from app.jobs.binding import Binding, Ingesting, Matching, Numbering
 from app.jobs.building import (
     Bench,
@@ -18,7 +22,16 @@ from app.jobs.building import (
     Saving,
     Shelf,
 )
-from app.jobs.checking import Bound, Checking, Docket, Folder, Judges, Judging, Tabled
+from app.jobs.checking import (
+    Bound,
+    Checking,
+    Docket,
+    Folder,
+    Judge,
+    Judges,
+    Judging,
+    Tabled,
+)
 from app.jobs.database import Sessions
 from app.jobs.folios import Folio
 from app.jobs.models import Declaration
@@ -26,8 +39,12 @@ from app.jobs.packages import Packages
 from app.jobs.queue import Snapshot
 from app.jobs.reporting import Reporting
 from app.jobs.versions import Versions
+from app.llm.messages import Message
+from app.llm.model import Model
 from app.policy.package import Package
 from app.policy.schema.profile import Profile
+from app.semantic import bench
+from app.semantic.brief import Brief, Prompt
 from app.storage.disk import Storage
 from app.storage.layout import Keys
 
@@ -98,6 +115,68 @@ class Profiled:
 
 
 @final
+class Situated:
+    """Model that answers in a copy of the context it was obtained in, so that a call made in
+    another thread is still booked under the job that asked for the model."""
+
+    __slots__ = ("_context", "_model")
+
+    def __init__(self, model: Model, context: contextvars.Context) -> None:
+        self._model: Final = model
+        self._context: Final = context
+
+    def answer[T: BaseModel](
+        self, purpose: str, messages: tuple[Message, ...], schema: type[T]
+    ) -> T:
+        return self._context.copy().run(self._model.answer, purpose, messages, schema)
+
+
+@final
+class Briefed:
+    """Judge that answers by another semantic judge and tells the version of the prompt it
+    asks the model with."""
+
+    __slots__ = ("_prompt", "_semantics")
+
+    def __init__(self, semantics: Semantics, prompt: Prompt) -> None:
+        self._semantics: Final = semantics
+        self._prompt: Final = prompt
+
+    def version(self) -> str:
+        return self._prompt.version()
+
+    def verdicts(self, questions: tuple[Question, ...]) -> tuple[Verdict, ...]:
+        return self._semantics.verdicts(questions)
+
+
+@final
+class Benches:
+    """Judges that put the semantic questions of a job on the model gateway: the model is built
+    when a job asks for its judge and answers in the context of that request, whatever thread
+    calls it; every card gets at most the given number of packs of the given size, so a
+    process without a gateway fails only when it really needs one."""
+
+    __slots__ = ("_journal", "_models", "_packs", "_size")
+
+    def __init__(self, models: Models, journal: Journal, packs: int, size: int) -> None:
+        self._models: Final = models
+        self._journal: Final = journal
+        self._packs: Final = packs
+        self._size: Final = size
+
+    def judge(self, job_id: int) -> Judge:
+        return Briefed(
+            bench.Bench(
+                Situated(self._models.model(job_id), contextvars.copy_context()),
+                self._journal,
+                self._packs,
+                self._size,
+            ),
+            Brief(),
+        )
+
+
+@final
 @dataclass(frozen=True)
 class Kit:
     """What the pipeline of a declaration takes from outside: the folder of the rule cards, the
@@ -116,8 +195,8 @@ class Standard:
     """Pipelines of the service: a declaration is read, bound to a policy, checked by the rule
     cards, given to the semantic judge and written to the result workbook.
 
-    The semantic judge comes from outside; the one that answers «требует проверки» without
-    calling a model is a valid choice until a real judge is connected.
+    The semantic judge comes from outside: the one on the model gateway, or the one that
+    answers «требует проверки» without calling a model when the gateway is not configured.
     """
 
     __slots__ = ("_bench", "_folio", "_journal", "_kit", "_sessions")

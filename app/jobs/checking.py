@@ -5,7 +5,6 @@ from collections import Counter
 from collections.abc import Mapping
 from concurrent.futures import Executor
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Final, Protocol, final
 
@@ -14,10 +13,8 @@ from sqlalchemy import delete
 from app.core.journal import Journal
 from app.declarations.declared import Declared
 from app.domain.card import Card
-from app.domain.clause import Clause
 from app.domain.declaration import Declaration as Filed
-from app.domain.money import Money
-from app.domain.policy import Policy
+from app.domain.policy import Policy, Unbound
 from app.domain.reason import Cause
 from app.domain.remark import Note
 from app.domain.semantics import Question, Semantics
@@ -36,12 +33,6 @@ from app.llm.errors import MisconfiguredError
 from app.reconcile.reconciliation import Carded, Findings, Reconciliation
 from app.rules.cards import Cards
 
-_REASONS: Mapping[str, str] = {
-    "policy_missing": "В декларации не указан номер генерального полиса",
-    "policy_unreadable": "Номер генерального полиса в декларации не распознан",
-    "policy_unknown": "Полис с таким номером не найден среди полисов вашей группы",
-    "policy_ambiguous": "Найдено несколько полисов с таким номером",
-}
 _UNNUMBERED = "без номера"
 
 type Signature = tuple[tuple[str, ...], ...]
@@ -75,56 +66,9 @@ class Retained:
         return self._shipments
 
 
-@final
-class Unlinked:
-    """Clause that cannot be taken because the declaration has no policy; it holds nothing and
-    its reference tells why."""
-
-    __slots__ = ("_reason",)
-
-    def __init__(self, reason: str) -> None:
-        self._reason: Final = reason
-
-    def reference(self) -> str:
-        return self._reason
-
-    def text(self) -> str:
-        return ""
-
-    def dates(self) -> tuple[date, ...]:
-        return ()
-
-    def amounts(self) -> tuple[Money, ...]:
-        return ()
-
-    def entries(self) -> tuple[str, ...]:
-        return ()
-
-
-@final
-class Unbound:
-    """Policy of a declaration that is not bound to any policy of its group: every clause is
-    empty, so each check asks a person, and the reason of the missing binding is its reference."""
-
-    __slots__ = ("_number", "_reason")
-
-    def __init__(self, number: str, reason: str) -> None:
-        self._number: Final = number
-        self._reason: Final = reason
-
-    def number(self) -> str:
-        return self._number
-
-    def clause(self, key: str, _shipment: Shipment) -> Clause:
-        return Unlinked(f"{self._reason}, пункт «{key}» не проверен")
-
-    def conditions(self) -> tuple[str, ...]:
-        return ()
-
-
 class Standing(Protocol):
     """Policy that a declaration is checked against: the approved profile of the bound policy
-    or, without a binding, a policy that has nothing to compare with."""
+    or, without a binding, a policy that refuses every clause with the reason of the binding."""
 
     async def policy(self, declaration_id: int, number: str) -> Policy: ...
 
@@ -148,7 +92,9 @@ class Bound:
             raise LookupError(f"Декларация {declaration_id} не найдена")
         if row.policy_id is not None:
             return await self._folio.approved(row.policy_id)
-        return Unbound(number, _REASONS.get(row.binding, "Декларация не привязана к полису"))
+        if not row.binding:
+            raise LookupError(f"Декларация {declaration_id} не прошла привязку к полису")
+        return Unbound(row.binding, number)
 
     async def profile(self, declaration_id: int) -> int:
         async with self._sessions.session() as session:

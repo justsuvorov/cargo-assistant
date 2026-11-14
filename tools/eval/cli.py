@@ -130,7 +130,7 @@ def _pipeline(args: argparse.Namespace, gold: Gold) -> tuple[str, Pipeline]:
     if args.pipeline == "checked":
         return (
             "разбор app.declarations и проверки по карточкам app.rules без профиля полиса "
-            "(Vacant), смысловые проверки — заглушка «требует проверки»",
+            "(Unbound, policy_unknown), смысловые проверки — заглушка «требует проверки»",
             Checked(Shelf(args.real).catalog(), args.cards),
         )
     stubs = {

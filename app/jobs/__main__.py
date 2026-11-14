@@ -9,7 +9,7 @@ from app.core.journal import LogJournal
 from app.core.schema.environment import Environment
 from app.core.settings import EnvSettings
 from app.jobs.building import Workbench
-from app.jobs.checking import Postponing, Unconfigured
+from app.jobs.checking import Unconfigured
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.gateway import Gateway, Tracked
@@ -17,7 +17,7 @@ from app.jobs.logbook import Careful, Journaled, Local
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.jobs.retention import Both, Cached, Monthly
-from app.jobs.stages import Building, Kit, Routed, Standard
+from app.jobs.stages import Benches, Building, Kit, Routed, Standard
 from app.jobs.versions import Fingerprint, Stamp
 from app.jobs.worker import Shift
 from app.llm.assembly import Configured
@@ -59,7 +59,7 @@ async def run() -> None:
                 settings.cards(),
                 DiskStorage(settings.storage()),
                 stamp,
-                Unconfigured(Postponing()),
+                Unconfigured(Benches(gateway, journal, 1, 40)),
                 ThreadPoolExecutor(settings.threads(), thread_name_prefix="semantic"),
             ),
         ),

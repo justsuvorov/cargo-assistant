@@ -101,6 +101,23 @@ class Unsettled:
         return ()
 
 
+class Listening:
+    """Policy without clauses that remembers every key it was asked."""
+
+    def __init__(self) -> None:
+        self.keys: list[str] = []
+
+    def number(self) -> str:
+        return "0000"
+
+    def clause(self, key: str, _shipment: Shipment) -> Clause:
+        self.keys.append(key)
+        return Absent(key)
+
+    def conditions(self) -> tuple[str, ...]:
+        return ()
+
+
 class Paper:
     """Declaration of a form whose rows are cell texts per field key, read by the parser."""
 

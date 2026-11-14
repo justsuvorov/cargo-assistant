@@ -6,7 +6,7 @@ from app.declarations.schema import Fields
 from app.domain.clause import Clause
 from app.domain.field import Field
 from app.domain.place import Spot
-from app.domain.policy import Policy, Vacant
+from app.domain.policy import Policy, Unbound, Vacant
 from app.domain.shipment import Shipment
 from app.domain.status import Match, Mismatch, Review
 from app.domain.verdict import Verdict
@@ -158,4 +158,31 @@ def test_doubted_probe_explains_why_the_policy_cannot_choose() -> None:
         .comment(),
         equal_to(reason),
         "Doubted does not explain why the policy cannot choose",
+    )
+
+
+def test_doubted_probe_asks_a_person_when_the_declaration_is_bound_to_no_policy() -> None:
+    reason = random.choice(("missing", "unreadable", "unknown", "ambiguous"))
+    verdict = _verdict(
+        Doubted(Grounded("limit", _Echo())), "sum", ("1 000",), Unbound(f"policy_{reason}", "1")
+    )
+    assert_that(
+        (verdict.status().key(), verdict.reason().code()),
+        equal_to(("review", f"policy.{reason}")),
+        "Doubted does not ask a person when the declaration is bound to no policy",
+    )
+
+
+def test_accepted_probe_runs_the_inner_probe_for_a_declaration_bound_to_no_policy() -> None:
+    assert_that(
+        _verdict(
+            Accepted("document", Constant(Match(), "filled")),
+            "document",
+            ("Накладная",),
+            Unbound("policy_unknown", "1"),
+        )
+        .reason()
+        .code(),
+        equal_to("document.filled"),
+        "Accepted does not run the inner probe when the declaration is bound to no policy",
     )

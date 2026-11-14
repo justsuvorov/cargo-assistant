@@ -90,6 +90,28 @@ class Doubt:
 
 
 @final
+class Severed:
+    """Outcome of a check whose declaration is bound to no policy: it needs a person, the code
+    is policy.<reason> and the card words the comment by the reason code of the binding."""
+
+    __slots__ = ("_reason",)
+
+    def __init__(self, reason: str) -> None:
+        self._reason: Final = reason
+
+    def questions(self, _place: Place) -> tuple[Question, ...]:
+        return ()
+
+    def verdict(self, place: Place, wording: Wording, _answers: Answers) -> Verdict:
+        return Ruling(
+            place,
+            Review(),
+            Cause(f"policy.{self._reason.removeprefix('policy_')}", "rule"),
+            wording.remark((self._reason, "review"), {}),
+        )
+
+
+@final
 class Pending:
     """Outcome that a semantic judge decides: a question now, its answer when it comes."""
 
