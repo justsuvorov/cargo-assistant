@@ -3,7 +3,7 @@ import string
 
 from hamcrest import assert_that, equal_to
 
-from app.rules.numbers import Numbered
+from app.domain.numbers import Numbered
 
 
 def digits() -> str:

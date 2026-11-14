@@ -4,10 +4,10 @@ from typing import Final, final
 
 from app.domain.clause import Clause
 from app.domain.field import Field
+from app.domain.numbers import Numbered
 from app.domain.policy import Policy
 from app.domain.shipment import Shipment
 from app.domain.status import Match, Mismatch, Review
-from app.rules.numbers import Numbered
 from app.rules.outcome import Finding, Outcome, Worst
 
 
