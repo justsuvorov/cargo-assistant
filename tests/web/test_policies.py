@@ -22,6 +22,7 @@ from app.jobs.checking import Postponing
 from app.jobs.database import Database
 from app.jobs.folios import Folios
 from app.jobs.logbook import Blank
+from app.jobs.models import PolicyProfile
 from app.jobs.packages import Shelving
 from app.jobs.queue import Queue
 from app.jobs.stages import Building, Kit, Routed, Standard
@@ -298,3 +299,27 @@ def test_shows_the_policy_to_its_owner(tmp_path: Path) -> None:
     with TestClient(application) as client:
         codes = (client.get("/policies/1").status_code, client.get("/policies/1/body").status_code)
     assert_that(codes, equal_to((200, 200)), "Policy is not shown to its owner")
+
+
+async def forget_version(config: EnvSettings) -> None:
+    database = Database(config.database())
+    async with database.session() as session:
+        row = await session.get(PolicyProfile, 1)
+        assert row is not None
+        row.body = {**row.body, "schema_version": 9}
+        await session.commit()
+    await database.close()
+
+
+def test_shows_a_clear_error_for_a_profile_of_an_unknown_version(tmp_path: Path) -> None:
+    config = settings(tmp_path)
+    with TestClient(create_app(config)) as client:
+        start(client)
+        built(config)
+        asyncio.run(asyncio.wait_for(forget_version(config), 30))
+        response = client.get("/policies/1")
+    assert_that(
+        (response.status_code, "Профиль нельзя прочитать" in response.text),
+        equal_to((200, True)),
+        "Page of the policy does not explain a profile of an unknown version",
+    )

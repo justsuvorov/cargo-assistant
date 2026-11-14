@@ -4,7 +4,7 @@ from fastapi import Request
 from sqlalchemy import select
 
 from app.auth.identity import Identity
-from app.jobs.errors import MissingProfileError
+from app.jobs.errors import MissingProfileError, SchemaVersionError
 from app.jobs.models import Declaration, Job, Policy, Workspace
 from app.jobs.queue import Snapshot
 from app.web.security import services
@@ -102,6 +102,6 @@ async def basis(request: Request, policy: Policy | None) -> Basis:
         return Basis("none", 0, ())
     try:
         taken = await services(request).folio.taken(policy.id)
-    except MissingProfileError:
+    except (MissingProfileError, SchemaVersionError):
         return Basis("missing", 0, ())
     return Basis(taken.status, taken.version, taken.problems)

@@ -7,10 +7,11 @@ from pathlib import Path
 from hamcrest import assert_that, contains_string, equal_to, raises
 
 from app.core.clock import Utc
+from app.jobs.checking import Bound
 from app.jobs.database import Database
-from app.jobs.errors import MissingProfileError, NotReadyError
+from app.jobs.errors import MissingProfileError, NotReadyError, SchemaVersionError
 from app.jobs.folios import Folios
-from app.jobs.models import Base, Policy
+from app.jobs.models import Base, Declaration, Policy, PolicyProfile
 from app.policy.schema.profile import Profile
 
 
@@ -248,4 +249,56 @@ def test_refuses_unknown_policy(tmp_path: Path) -> None:
         lambda: asyncio.run(asyncio.wait_for(drafts_unknown_policy(tmp_path), 30)),
         raises(Exception, "Полис 99 не найден"),
         "Draft of an unknown policy is not refused",
+    )
+
+
+async def stored_body(tmp_path: Path, version: int | None) -> tuple[Database, Folios]:
+    database, policy = await prepare(tmp_path)
+    body = profile("N-1", date(2026, 1, 1), "Икс").model_dump(mode="json")
+    if version is None:
+        del body["schema_version"]
+    else:
+        body["schema_version"] = version
+    async with database.session() as session:
+        session.add(PolicyProfile(policy_id=policy, version=1, body=body, status="approved"))
+        await session.commit()
+    return database, Folios(database, Utc())
+
+
+async def reads_profile_saved_before_the_version(tmp_path: Path) -> str:
+    database, folio = await stored_body(tmp_path, None)
+    taken = await folio.taken(1)
+    await database.close()
+    return taken.insurer
+
+
+def test_reads_the_profile_saved_before_the_version_existed(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(reads_profile_saved_before_the_version(tmp_path), 30)),
+        equal_to("Икс"),
+        "Profile saved without the version is not read",
+    )
+
+
+async def refuses_profile_of_future_version(tmp_path: Path) -> tuple[bool, str]:
+    database, folio = await stored_body(tmp_path, 5)
+    try:
+        await folio.latest(1)
+    except SchemaVersionError:
+        raised = True
+    else:
+        raised = False
+    async with database.session() as session:
+        session.add(Declaration(file_name="a.xlsx", policy_id=1, created_at=datetime(2026, 1, 1)))
+        await session.commit()
+    taken = await Bound(folio, database).taken(1, "N-1")
+    await database.close()
+    return raised, taken.status
+
+
+def test_checks_by_review_when_the_profile_has_a_future_version(tmp_path: Path) -> None:
+    assert_that(
+        asyncio.run(asyncio.wait_for(refuses_profile_of_future_version(tmp_path), 30)),
+        equal_to((True, "missing")),
+        "Profile of a future version is not refused or does not send the check to review",
     )
