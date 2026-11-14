@@ -282,7 +282,7 @@ class Sender:
 def signed_in(application: FastAPI, roles: set[str], groups: set[str]) -> FastAPI:
     application.state.services = replace(
         application.state.services,
-        passport=Sender(Person("visitor", frozenset(roles), frozenset(groups))),
+        passport=Sender(Person("v", "visitor", frozenset(roles), frozenset(groups))),
     )
     return application
 

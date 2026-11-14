@@ -16,20 +16,25 @@ class Identity(Protocol):
 
     def group(self) -> str: ...
 
+    def card(self) -> dict[str, object]: ...
+
 
 @final
 class Person:
     """Identity with roles and groups; the group star stands for every group."""
 
-    __slots__ = ("_groups", "_name", "_roles")
+    __slots__ = ("_groups", "_id", "_name", "_roles")
 
-    def __init__(self, name: str, roles: frozenset[str], groups: frozenset[str]) -> None:
+    def __init__(
+        self, ident: str, name: str, roles: frozenset[str], groups: frozenset[str]
+    ) -> None:
+        self._id: Final = ident
         self._name: Final = name
         self._roles: Final = roles
         self._groups: Final = groups
 
     def id(self) -> str:
-        return self._name
+        return self._id
 
     def name(self) -> str:
         return self._name
@@ -46,6 +51,14 @@ class Person:
             raise DeniedError(f"У пользователя {self._name} нет группы доступа")
         return owned[0]
 
+    def card(self) -> dict[str, object]:
+        return {
+            "sub": self._id,
+            "name": self._name,
+            "roles": sorted(self._roles),
+            "groups": sorted(self._groups),
+        }
+
 
 @final
 class Local:
@@ -56,6 +69,7 @@ class Local:
     def __init__(self, user: str) -> None:
         self._id: Final = user
         self._person: Final = Person(
+            user,
             "Локальный пользователь",
             frozenset({"user", "expert", "admin"}),
             frozenset({"*", "dev"}),
@@ -75,3 +89,6 @@ class Local:
 
     def group(self) -> str:
         return self._person.group()
+
+    def card(self) -> dict[str, object]:
+        return {**self._person.card(), "sub": self._id}

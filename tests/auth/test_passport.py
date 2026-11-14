@@ -31,7 +31,7 @@ def pair() -> tuple[rsa.RSAPrivateKey, StaticKeys]:
 
 def token(private: rsa.RSAPrivateKey, claims: dict[str, object]) -> str:
     return jwt.encode(
-        {"exp": int(time.time()) + 60, "aud": "cargo", **claims},
+        {"exp": int(time.time()) + 60, "aud": "cargo", "sub": "u1", **claims},
         private,
         algorithm="RS256",
         headers={"kid": "k1"},
@@ -130,6 +130,38 @@ def test_rejects_garbage_instead_of_token(tmp_path: Path) -> None:
         lambda: Keycloak(settings(tmp_path, "main"), keys).identity("garbage"),
         raises(DeniedError),
         "Garbage is not rejected",
+    )
+
+
+def test_gives_sub_as_identifier_and_username_as_name(tmp_path: Path) -> None:
+    realm = f"r{random.randint(1, 999)}"
+    private, keys = pair()
+    identity = Keycloak(settings(tmp_path, realm), keys).identity(
+        token(
+            private,
+            {
+                "iss": f"http://kc.local/realms/{realm}",
+                "sub": "u-42",
+                "preferred_username": "ivanov",
+            },
+        )
+    )
+    assert_that(
+        (identity.id(), identity.name()),
+        equal_to(("u-42", "ivanov")),
+        "Identifier is not the sub claim or name is not preferred_username",
+    )
+
+
+def test_refuses_token_without_sub(tmp_path: Path) -> None:
+    realm = f"r{random.randint(1, 999)}"
+    private, keys = pair()
+    assert_that(
+        lambda: Keycloak(settings(tmp_path, realm), keys).identity(
+            token(private, {"iss": f"http://kc.local/realms/{realm}", "sub": ""})
+        ),
+        raises(DeniedError, "sub"),
+        "Token without sub is accepted",
     )
 
 

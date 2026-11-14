@@ -81,8 +81,12 @@ class Keycloak:
             )
         except (jwt.PyJWTError, KeyError) as error:
             raise DeniedError(f"Токен не принят: {error}") from error
+        sub = str(claims.get("sub", ""))
+        if not sub:
+            raise DeniedError("Токен не принят: в нём нет claim sub")
         return Person(
-            str(claims.get("preferred_username", claims.get("sub", ""))),
+            sub,
+            str(claims.get("preferred_username", sub)),
             self._roles(frozenset(map(str, claims.get("realm_access", {}).get("roles", [])))),
             frozenset(str(group).strip("/") for group in claims.get("groups", [])),
         )

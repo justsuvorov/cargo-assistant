@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 
+from app.auth.exchange import Tokens
 from app.auth.passport import Passport
+from app.auth.seal import Seal
 from app.core.settings import Settings
 from app.jobs.database import Sessions
 from app.jobs.folios import Folio
@@ -21,4 +23,7 @@ class Services:
     packages: Packages
     folio: Folio
     passport: Passport
+    session: Passport
+    seal: Seal
+    tokens: Tokens
     storage: Storage

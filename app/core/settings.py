@@ -51,6 +51,22 @@ class Settings(Protocol):
 
     def role(self, name: str) -> str: ...
 
+    def authorize(self) -> str: ...
+
+    def tokens(self) -> str: ...
+
+    def logout(self) -> str: ...
+
+    def secret(self) -> str: ...
+
+    def client_secret(self) -> str: ...
+
+    def secure(self) -> bool: ...
+
+    def hours(self) -> int: ...
+
+    def base(self) -> str: ...
+
 
 @final
 class EnvSettings:
@@ -135,3 +151,27 @@ class EnvSettings:
             "expert": self._environment.keycloak_role_expert,
             "admin": self._environment.keycloak_role_admin,
         }[name]
+
+    def authorize(self) -> str:
+        return f"{self.issuer()}/protocol/openid-connect/auth"
+
+    def tokens(self) -> str:
+        return f"{self.issuer()}/protocol/openid-connect/token"
+
+    def logout(self) -> str:
+        return f"{self.issuer()}/protocol/openid-connect/logout"
+
+    def secret(self) -> str:
+        return self._environment.session_secret.get_secret_value()
+
+    def client_secret(self) -> str:
+        return self._environment.keycloak_client_secret.get_secret_value()
+
+    def secure(self) -> bool:
+        return self._environment.session_secure
+
+    def hours(self) -> int:
+        return self._environment.session_hours
+
+    def base(self) -> str:
+        return self._environment.app_base_url.rstrip("/")

@@ -49,9 +49,14 @@ class Environment(BaseSettings):
     keycloak_url: str = ""
     keycloak_realm: str = ""
     keycloak_client_id: str = ""
+    keycloak_client_secret: SecretStr = SecretStr("")
     keycloak_role_user: str = "cargo_user"
     keycloak_role_expert: str = "cargo_expert"
     keycloak_role_admin: str = "cargo_admin"
+    session_secret: SecretStr = SecretStr("")
+    session_secure: bool = True
+    session_hours: PositiveInt = 12
+    app_base_url: str = ""
     auth_disabled: bool = False
     auth_dev_mode: bool = False
     auth_dev_user_id: str = "dev-user"
